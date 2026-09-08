@@ -11,7 +11,7 @@ parts remain experimental.
 
 ## Progress
 
-- [ ] Fatal Frame 1 / Project Zero 1: **15%**
+- [ ] Fatal Frame 1 / Project Zero 1: **5%**
 - [ ] Fatal Frame 3 / Project Zero 3: **45%**
 
 These percentages describe overall format discovery, decoding, rendering, and
