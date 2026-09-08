@@ -33,15 +33,15 @@ export coverage rather than completion of any single feature.
 ### Fatal Frame 1 / Project Zero 1
 
 - **Rooms (`.pk2`)**: extracts room geometry from `near_sgd` and related
-  near/far/side streams.
+  near/far/side streams. (Borked, nees rewrite)
 - **Items, furniture, and doors (`.sgd`)**: decodes VIF/SGD packets including
   packet types `0x10`, `0x12`, `0x32`, `0x80`, and `0x82`.
 - **Characters (`.mdl`)**: unpacks MPK sub-SGD data and associated PK2 TIM2
   textures.
 - **Animations (`.anm`)**: decodes MOTN rotation, translation, and scaling
-  tracks.
+  tracks. (Borked)
 - **Collision**: reads room hit-check polygons, SGD ProcUnit 4 bounding boxes,
-  and character bone colliders.
+  and character bone colliders. (Borked)
 
 ### Fatal Frame 3 / Project Zero 3
 
