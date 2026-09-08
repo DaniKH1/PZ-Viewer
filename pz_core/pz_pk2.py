@@ -120,19 +120,7 @@ def _unpack_pz1(data, count):
         starts = offsets
         payload_offsets = [16] * count
     else:
-        # Obscura's PZ1 loader follows a linked table: each offset is the
-        # relative distance from the current table node to the next node.
-        # The embedded SGD payload begins 0x10 bytes after each node.
-        table_offsets = [16]
-        table = 16
-        for relative in offsets[:-1]:
-            next_table = table + relative + 16
-            if next_table <= table or next_table + 16 >= len(data):
-                return []
-            table_offsets.append(next_table)
-            table = next_table
-        starts = table_offsets
-        payload_offsets = [16] * count
+        return []
 
     entries = []
     for index, start in enumerate(starts):
@@ -159,7 +147,19 @@ def unpack_pk2(data_or_path, pz1=False):
         return []
 
     if pz1:
-        return _unpack_pz1(data, count)
+        # PZ1 room assets use more than one wrapper in the wild. Prefer the
+        # explicit PZ1 layouts, then accept the Obscura/legacy layouts when
+        # their payloads are valid SGD resources.
+        pz1_entries = _unpack_pz1(data, count)
+        if pz1_entries:
+            return pz1_entries
+        sequential = _unpack_sequential(data, count)
+        if sequential:
+            return sequential
+        linked = _unpack_linked(data, count)
+        if linked:
+            return linked
+        return []
 
     sequential = _unpack_sequential(data, count)
     if sequential:
