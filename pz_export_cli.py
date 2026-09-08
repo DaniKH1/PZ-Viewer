@@ -5,7 +5,7 @@ import struct
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from pz_core.pz_pk2_pz1 import unpack_room_pk2_pz1
+from pz_core.pz_pk2 import unpack_room_pk2_pz1
 from pz_core.pz_pk4 import parse_pk4_model
 from pz_core.pz_sgd import parse_sgd
 from pz_core.pz_mdl import parse_mdl

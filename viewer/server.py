@@ -13,7 +13,7 @@ from urllib.parse import urlparse, parse_qs
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PIL import Image
-from pz_core.pz_pk2_pz1 import unpack_room_pk2_pz1
+from pz_core.pz_pk2 import unpack_room_pk2_pz1
 from pz_core.pz_pk4 import flip_uvs_vertical, iter_pk4_entries, parse_pk4_model
 from pz_core.pz_sgd import parse_sgd, merge_sgd_models
 from pz_core.pz_mdl import parse_mdl
