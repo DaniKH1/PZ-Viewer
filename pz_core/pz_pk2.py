@@ -120,7 +120,19 @@ def _unpack_pz1(data, count):
         starts = offsets
         payload_offsets = [16] * count
     else:
-        return []
+        # Obscura's PZ1 loader follows a linked table: each offset is the
+        # relative distance from the current table node to the next node.
+        # The embedded SGD payload begins 0x10 bytes after each node.
+        table_offsets = [16]
+        table = 16
+        for relative in offsets[:-1]:
+            next_table = table + relative + 16
+            if next_table <= table or next_table + 16 >= len(data):
+                return []
+            table_offsets.append(next_table)
+            table = next_table
+        starts = table_offsets
+        payload_offsets = [16] * count
 
     entries = []
     for index, start in enumerate(starts):
