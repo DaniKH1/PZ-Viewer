@@ -12,6 +12,19 @@ def decode_tim2(data):
 
     format_ver, format_id, pictures = struct.unpack('<BBH', data[4:8])
     offset = 16
+    # Extracted FF3 object TPKs may preserve a 112-byte alignment/padding
+    # area between the TIM2 header and its picture header.
+    if offset + 48 <= len(data) and struct.unpack_from('<I', data, offset)[0] == 0:
+        for candidate in range(32, min(256, len(data) - 48), 16):
+            total_size, clut_size, image_size, header_size, clut_colors = struct.unpack_from(
+                '<IIIHH', data, candidate
+            )
+            width, height = struct.unpack_from('<HH', data, candidate + 28)
+            if (total_size >= 48 and header_size >= 48 and image_size > 0
+                    and width > 0 and height > 0
+                    and candidate + total_size <= len(data)):
+                offset = candidate
+                break
     images = []
 
     for _ in range(pictures):

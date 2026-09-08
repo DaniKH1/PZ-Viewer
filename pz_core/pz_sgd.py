@@ -64,6 +64,17 @@ def transform_norm(n, mat):
         return [tx/l, ty/l, tz/l]
     return [tx, ty, tz]
 
+def normalize_mesh_normals(model):
+    for mesh in model.meshes:
+        normalized = []
+        for normal in mesh.normals:
+            length = math.sqrt(sum(component * component for component in normal))
+            normalized.append(
+                [component / length for component in normal]
+                if length > 1e-6 else [0.0, 1.0, 0.0]
+            )
+        mesh.normals = normalized
+
 def get_next_unpack(data, offset):
     while offset + 4 <= len(data):
         w = struct.unpack('<I', data[offset:offset+4])[0]
@@ -283,6 +294,11 @@ def parse_sgd(data, name="sgd", lit_data=None, external_bones=None):
                 # Extract tex0 from MESH unit if available (at curr + 40)
                 mesh_tex0_low = struct.unpack('<I', data[curr+40:curr+44])[0] if curr + 44 <= len(data) else 0
                 mesh_tbp0 = mesh_tex0_low & 0x3FFF
+                if mesh_tbp0 >= 0 and current_mat_idx < len(model.materials):
+                    material = model.materials[current_mat_idx]
+                    if material.tbp0 == 0 and mesh_tex0_low != 0:
+                        material.tex0_low = mesh_tex0_low
+                        material.tbp0 = mesh_tbp0
 
                 # Case 1: Skinned Character Meshes (0x2, 0xA)
                 if (mtype & 0xD3) == 0x2:
@@ -306,6 +322,7 @@ def parse_sgd(data, name="sgd", lit_data=None, external_bones=None):
 
                     # Submesh strip counts at curr + 64
                     pinfo_off = curr + 64
+                    # Character files use the compact point-number/ST layout.
                     st_ptr = pinfo_off + num_mesh * 8 + 12
                     mesh_vert_offset = 0
 
@@ -321,8 +338,15 @@ def parse_sgd(data, name="sgd", lit_data=None, external_bones=None):
                         sub_uvs = []
                         if st_ptr + 4 + pt_num * 8 <= len(data):
                             for vi in range(pt_num):
-                                u, v = struct.unpack('<ff', data[st_ptr + 4 + vi * 8 : st_ptr + 4 + (vi + 1) * 8])
-                                sub_uvs.append([u, v])
+                                uv_off = st_ptr + 4 + vi * 8
+                                u = struct.unpack('<f', data[uv_off:uv_off + 4])[0]
+                                raw_v = struct.unpack('<f', data[uv_off + 4:uv_off + 8])[0]
+                                if struct.unpack('<I', data[uv_off + 4:uv_off + 8])[0] == 1:
+                                    if vi >= 2 and sub_uvs:
+                                        raw_v = 1.0 - sub_uvs[vi - 2][1]
+                                    elif vi >= 1 and sub_uvs:
+                                        raw_v = 1.0 - sub_uvs[vi - 1][1]
+                                sub_uvs.append([u, 1.0 - raw_v])
                         else:
                             sub_uvs = [[0.0, 0.0]] * pt_num
                         fix_uv(sub_uvs)
@@ -417,8 +441,15 @@ def parse_sgd(data, name="sgd", lit_data=None, external_bones=None):
                         sub_uvs = []
                         if st_ptr + 4 + pt_num * 8 <= len(data):
                             for vi in range(pt_num):
-                                u, v = struct.unpack('<ff', data[st_ptr + 4 + vi * 8 : st_ptr + 4 + (vi + 1) * 8])
-                                sub_uvs.append([u, v])
+                                uv_off = st_ptr + 4 + vi * 8
+                                u = struct.unpack('<f', data[uv_off:uv_off + 4])[0]
+                                raw_v = struct.unpack('<f', data[uv_off + 4:uv_off + 8])[0]
+                                if struct.unpack('<I', data[uv_off + 4:uv_off + 8])[0] == 1:
+                                    if vi >= 2 and sub_uvs:
+                                        raw_v = 1.0 - sub_uvs[vi - 2][1]
+                                    elif vi >= 1 and sub_uvs:
+                                        raw_v = 1.0 - sub_uvs[vi - 1][1]
+                                sub_uvs.append([u, 1.0 - raw_v])
                         else:
                             sub_uvs = [[0.0, 0.0]] * pt_num
                         fix_uv(sub_uvs)
@@ -537,6 +568,8 @@ def parse_sgd(data, name="sgd", lit_data=None, external_bones=None):
                                 sub_cols.append([0.8, 0.8, 0.8, 1.0])
 
                         for vi in range(v_count):
+                            joint0, joint1 = coord_id, 0
+                            vert_weights = [1.0, 0.0, 0.0, 0.0]
                             if mtype == 0x32:
                                 vo = vert_start + (mesh_vert_offset + vi) * 12
                                 if vo + 12 <= len(data):
@@ -582,6 +615,7 @@ def parse_sgd(data, name="sgd", lit_data=None, external_bones=None):
                 break
             curr += pnext
 
+    normalize_mesh_normals(model)
     return model
 
 

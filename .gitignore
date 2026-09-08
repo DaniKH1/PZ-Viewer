@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*.pyo
+
+exports/
+logs/
+tmp/
+temp/
+attachments/
+
+# Local IDE and operating-system files
+.pytest_cache/
+.mypy_cache/
+.vscode/
+.idea/
+*.log
+Thumbs.db
+.DS_Store

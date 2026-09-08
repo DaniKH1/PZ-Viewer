@@ -1,10 +1,12 @@
 ﻿import os
 import sys
 import argparse
+import struct
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from pz_core.pz_pk2 import unpack_room_pk2, unpack_pk2
+from pz_core.pz_pk2_pz1 import unpack_room_pk2_pz1
+from pz_core.pz_pk4 import parse_pk4_model
 from pz_core.pz_sgd import parse_sgd
 from pz_core.pz_mdl import parse_mdl
 from pz_core.pz_anm import parse_anm
@@ -23,17 +25,24 @@ def convert_file(input_path, output_dir, formats=['glb'], export_t_pose=True, in
 
     if ext == '.pk2':
         # Check if room PK2 or generic
-        room = unpack_room_pk2(input_path)
+        room = unpack_room_pk2_pz1(input_path)
         if room['near_sgd']:
             lit_path = os.path.splitext(input_path)[0] + '.lit'
             lit_data = None
             if os.path.exists(lit_path):
                 with open(lit_path, 'rb') as lf:
                     lit_data = lf.read()
-            model = parse_sgd(room['near_sgd'], name=base_name, lit_data=lit_data)
+            try:
+                model = parse_sgd(room['near_sgd'], name=base_name, lit_data=lit_data)
+            except struct.error:
+                model = None
         else:
             print(f"  Warning: PK2 did not contain room SGD geometry.")
             return
+
+    elif ext == '.pk4':
+        is_room = '\\room\\' in os.path.normcase(os.path.abspath(input_path))
+        model = parse_pk4_model(input_path, name=base_name, flip_uv=is_room)
 
     elif ext == '.sgd':
         with open(input_path, 'rb') as f:
