@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <link rel="icon" type="image/png" href="app-icon.png">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Project Zero / Fatal Frame 1 - 3D Viewer & Extractor</title>
   <link rel="stylesheet" href="style.css">
@@ -26,7 +27,7 @@
     <header class="topbar">
       <div class="topbar-left">
         <div class="logo">
-          <span class="icon">📷</span>
+          <img class="icon app-logo" src="app-icon.png" alt="PZViewer">
           <h1>Project Zero / Fatal Frame 3D Viewer</h1>
           <span class="badge">MikuPan Engine</span>
         </div>
@@ -49,23 +50,10 @@
     <div class="main-content">
       <!-- Left Sidebar -->
       <aside class="sidebar">
-        <!-- Quick Load Buttons -->
-        <section class="panel-section">
-          <h3>📂 Quick Load Assets</h3>
-          <div class="quick-grid">
-            <button class="btn btn-quick" data-path="f:/Project Zero Modding/Obscura/bin/3ddata/room/r000_genkan.pk2">🚪 Room (Entrance)</button>
-            <button class="btn btn-quick" data-path="f:/Project Zero Modding/Obscura/bin/3ddata/man/mdl/m000_miku.mdl">👤 Miku (Character)</button>
-            <button class="btn btn-quick" data-path="f:/Project Zero Modding/Obscura/bin/3ddata/man/mdl/m001_mafuyu.mdl">👤 Mafuyu (Character)</button>
-            <button class="btn btn-quick" data-path="f:/Project Zero Modding/Obscura/bin/3ddata/furniture/f000_clock_l.sgd">🕰️ Grandfather Clock</button>
-            <button class="btn btn-quick" data-path="f:/Project Zero Modding/Obscura/bin/3ddata/door/d000_gen1.sgd">🚪 Sliding Door</button>
-            <button class="btn btn-quick" data-path="f:/Project Zero Modding/Obscura/bin/3ddata/item/i000_play_camera1.sgd">📷 Camera Obscura</button>
-          </div>
-        </section>
-
         <!-- File Browser -->
         <section class="panel-section">
           <div class="section-header">
-            <h3>🗂️ File Browser</h3>
+            <h3>🗂️ Asset Browser</h3>
             <div style="display: flex; gap: 4px;">
               <button id="btn-dir-up" class="btn btn-sm" title="Go up to parent directory">⬆ Up</button>
               <button id="btn-choose-folder" class="btn btn-sm btn-primary" title="Open native folder picker">📁 Browse...</button>
@@ -73,11 +61,13 @@
             </div>
           </div>
           <div class="dir-nav">
-            <input type="text" id="input-dir" value="f:/Project Zero Modding/Obscura/bin/3ddata" placeholder="Path to folder...">
+            <input type="text" id="input-dir" value="" placeholder="Choose a folder or enter a path...">
             <button id="btn-dir-go" class="btn btn-sm">Go</button>
           </div>
+          <input type="search" id="file-filter" class="file-filter" placeholder="Filter files and folders...">
+          <div id="browser-location" class="browser-location"></div>
           <div id="file-list" class="file-list">
-            <div class="loading-hint">Loading file tree...</div>
+            <div class="loading-hint">Choose a folder to browse assets.</div>
           </div>
         </section>
 
@@ -113,7 +103,8 @@
           <div class="control-group">
             <label>Shading:</label>
             <select id="select-shading">
-              <option value="textured" selected>Textures + Lighting</option>
+              <option value="textured" selected>Textures</option>
+              <option value="textured_vertex">Textures + Vertex Color</option>
               <option value="vcolors">Vertex Colors (Rooms)</option>
               <option value="wireframe">Wireframe</option>
               <option value="solid">Solid White</option>
@@ -123,12 +114,24 @@
             <label><input type="checkbox" id="chk-bones"> Bones</label>
           </div>
           <div class="control-group">
-            <label><input type="checkbox" id="chk-collision" checked> Collision</label>
+            <label><input type="checkbox" id="chk-collision"> Collision</label>
           </div>
-          <div class="control-group">
-            <label><input type="checkbox" id="chk-flashlight"> Flashlight</label>
-          </div>
+          <button id="btn-mesh-layers" class="btn btn-sm">Layers</button>
           <button id="btn-reset-cam" class="btn btn-sm" title="Center view">🎯 Reset Cam (F)</button>
+        </div>
+
+        <div id="layers-modal" class="layers-modal hidden">
+          <div class="layers-modal-content">
+            <div class="layers-modal-header">
+              <b>Mesh Layers</b>
+              <button id="btn-close-layers" class="btn-icon">✖</button>
+            </div>
+            <div class="layers-actions">
+              <button id="btn-layers-all" class="btn btn-sm">Activate all</button>
+              <button id="btn-layers-none" class="btn btn-sm">Deactivate all</button>
+            </div>
+            <div id="mesh-layers"><span class="muted">Load an asset to view its meshes.</span></div>
+          </div>
         </div>
 
         <!-- Animation Timeline Panel -->
@@ -143,7 +146,7 @@
               <select id="select-clip"></select>
             </div>
             <div class="anim-extra-actions">
-              <button id="btn-load-anm" class="btn btn-sm">Load .ANM...</button>
+              <button id="btn-load-anm" class="btn btn-sm">Load animation...</button>
               <button id="btn-detach-anm" class="btn btn-sm btn-danger" title="Detach animation to see pure T-Pose">Detach</button>
             </div>
           </div>
@@ -183,16 +186,13 @@
           </div>
           <div class="form-group">
               <label><input type="radio" name="export-fmt" value="glb" checked> <b>glTF 2.0 (.glb)</b> <span class="fmt-hint">(Recommended for Blender / Engines)</span></label>
-              <label><input type="radio" name="export-fmt" value="glb_zip"> <b>glTF 2.0 + PNG Textures (.zip)</b> <span class="fmt-hint">(Model + PNG texture folder)</span></label>
-              <label><input type="radio" name="export-fmt" value="obj_zip"> <b>Wavefront OBJ + PNGs (.zip)</b> <span class="fmt-hint">(Model + MTL + PNG textures)</span></label>
-              <label id="lbl-fmt-png"><input type="radio" name="export-fmt" value="png"> <b>PNG Textures Only (.zip)</b> <span class="fmt-hint">(Extract all model textures)</span></label>
               <label id="lbl-fmt-obj"><input type="radio" name="export-fmt" value="obj"> <b>Wavefront OBJ (.obj)</b></label>
               <label id="lbl-fmt-dae"><input type="radio" name="export-fmt" value="dae"> <b>COLLADA (.dae)</b> <span class="fmt-hint">(Skins & rigs)</span></label>
               <label id="lbl-fmt-fbx"><input type="radio" name="export-fmt" value="fbx"> <b>Autodesk FBX (.fbx)</b> <span class="fmt-hint">(Maya / Max / Unity)</span></label>
             </div>
           <div id="model-options-box" class="form-group options-box">
             <h4>Model Options:</h4>
-            <label><input type="checkbox" id="exp-vcolors" checked> <b>Preserve Vertex Colors</b> <span class="opt-desc">(Crucial for room lighting in Blender)</span></label>
+            <label id="lbl-exp-vcolors"><input type="checkbox" id="exp-vcolors" checked> <b>Preserve Vertex Colors</b> <span class="opt-desc">(Rooms only)</span></label>
             <label><input type="checkbox" id="exp-tpose" checked> <b>Export in T-Pose</b> <span class="opt-desc">(Export clean character bind pose)</span></label>
             <label><input type="checkbox" id="exp-textures" checked> <b>Include & Extract Textures (PNG)</b> <span class="opt-desc">(Saved to exports/[name]_textures/)</span></label>
           </div>
@@ -204,14 +204,17 @@
             <label><input type="checkbox" id="exp-col-vcolors" checked> <b>Include Collision Vertex Colors</b></label>
           </div>
           <div class="form-group">
-            <label>Save to Destination (optional custom path):</label>
-            <input type="text" id="exp-output-path" placeholder="Default: PZViewer/exports/[name].[ext]">
+            <label>Save to Destination:</label>
+            <div class="export-destination-row">
+              <div id="export-destination" class="export-destination">PZViewer/Exports/[asset-name]/</div>
+              <button id="btn-choose-export-folder" type="button" class="btn btn-secondary">Choose Folder</button>
+            </div>
           </div>
           <div id="export-status" class="export-status"></div>
         </div>
         <div class="modal-footer">
           <button id="btn-modal-cancel" class="btn btn-secondary">Cancel</button>
-          <button id="btn-modal-do-export" class="btn btn-primary">Download Export</button>
+          <button id="btn-modal-do-export" class="btn btn-primary">Export</button>
         </div>
       </div>
     </div>
