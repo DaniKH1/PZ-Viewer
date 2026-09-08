@@ -3,6 +3,8 @@ import sys
 import json
 import base64
 import zipfile
+import struct
+import re
 from io import BytesIO
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -11,15 +13,19 @@ from urllib.parse import urlparse, parse_qs
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PIL import Image
-from pz_core.pz_pk2 import unpack_room_pk2, unpack_pk2
+from pz_core.pz_pk2_pz1 import unpack_room_pk2_pz1
+from pz_core.pz_pk4 import flip_uvs_vertical, iter_pk4_entries, parse_pk4_model
 from pz_core.pz_sgd import parse_sgd, merge_sgd_models
 from pz_core.pz_mdl import parse_mdl
 from pz_core.pz_anm import parse_anm
+from pz_core.pz_bmd import parse_bmd_motion
 from pz_core.pz_tim2 import decode_tim2, render_tim2_clut_variation
 from pz_core.pz_collision import (
     parse_room_collision_from_map,
     parse_all_rooms_collision_from_map,
-    collision_to_sgd_model
+    collision_to_sgd_model,
+    parse_cld,
+    parse_cld_folder
 )
 from pz_core.pz_export import export_glb, export_obj, export_dae, export_fbx, export_textures_png
 
@@ -35,6 +41,55 @@ CURRENT_STATE = {
     "source_file": "",
     "model_type": "none"
 }
+
+def find_matching_bmd_animations(model_path):
+    """Load FF3 motion clips whose character prefix matches a PK4 model."""
+    model_text = os.path.abspath(model_path).lower()
+    match = re.search(r"([a-z]+\d+)_pk4", model_text)
+    if not match:
+        model_stem = os.path.splitext(os.path.basename(model_path))[0].lower()
+        match = re.match(r"([a-z]+\d+)", model_stem)
+    if not match:
+        return []
+    prefix = match.group(1)
+    model_abs = os.path.abspath(model_path)
+    parts = model_abs.split(os.sep)
+    try:
+        data_index = next(i for i, part in enumerate(parts) if part.lower() == "3ddata")
+    except StopIteration:
+        return []
+    data_root = os.sep.join(parts[:data_index + 1])
+    motion_root = os.path.join(data_root, "character", "motion")
+    if not os.path.isdir(motion_root):
+        return []
+
+    clips = []
+    motion_dirs = sorted(
+        os.path.join(motion_root, entry)
+        for entry in os.listdir(motion_root)
+        if entry.lower().startswith(prefix)
+        and os.path.isdir(os.path.join(motion_root, entry))
+    )
+    default_dirs = [
+        path for path in motion_dirs
+        if "_default_" in os.path.basename(path).lower()
+    ]
+    if default_dirs:
+        motion_dirs = default_dirs
+    for motion_dir in motion_dirs:
+        for bmd_path in sorted(
+            os.path.join(root, filename)
+            for root, _, files in os.walk(motion_dir)
+            for filename in files
+            if filename.lower().endswith(".bmd")
+        ):
+            clip = parse_bmd_motion(
+                bmd_path,
+                name=f"{os.path.basename(motion_dir)}/{os.path.splitext(os.path.basename(bmd_path))[0]}"
+            )
+            if clip:
+                clips.append(clip)
+    return clips
 
 def serialize_model(model, textures=None, animations=None, collision_meshes=None, model_type="model"):
     tex_list = []
@@ -141,7 +196,7 @@ def serialize_model(model, textures=None, animations=None, collision_meshes=None
             })
 
     return {
-        "filename": getattr(model, 'name', 'model'),
+        "filename": getattr(model, 'export_name', getattr(model, 'name', 'model')),
         "name": getattr(model, 'name', 'model'),
         "type": model_type,
         "model_type": model_type,
@@ -150,6 +205,7 @@ def serialize_model(model, textures=None, animations=None, collision_meshes=None
         "bones": bones_data,
         "collision": collision_struct,
         "textures": tex_list,
+        "uvs_flipped": bool(getattr(model, "uvs_are_flipped", False)),
         "animations": anims_data,
         "stats": {
             "vertices": total_verts,
@@ -197,9 +253,19 @@ def find_textures_for_model(file_path, model):
                                 candidate_dirs.append(root)
 
     found_images_by_tbp0 = {}
+    texture_variants_by_tbp0 = {}
     found_images_by_name = {}
     base_timgs_by_tbp0 = {}
     clut_only_entries = []
+    archive_paths = []
+    if os.path.splitext(file_path)[1].lower() == '.pk4':
+        archive_dir = os.path.dirname(os.path.abspath(file_path))
+        archive_paths.append(file_path)
+        archive_paths.extend(
+            os.path.join(archive_dir, fname)
+            for fname in os.listdir(archive_dir)
+            if fname.lower().endswith('.pk4') and 'tpk' in fname.lower()
+        )
 
     for cdir in candidate_dirs:
         if os.path.exists(cdir) and os.path.isdir(cdir):
@@ -228,12 +294,33 @@ def find_textures_for_model(file_path, model):
                                     else:
                                         img = timg.get('image')
                                         if img:
-                                            if tbp0 > 0:
+                                            if tbp0 >= 0:
                                                 found_images_by_tbp0[tbp0] = img
                                                 base_timgs_by_tbp0[tbp0] = timg
+                                                texture_variants_by_tbp0.setdefault(tbp0, []).append(img)
                                             found_images_by_name[stem] = img
                     except Exception:
                         pass
+
+    for archive_path in archive_paths:
+        try:
+            for entry in iter_pk4_entries(archive_path):
+                if entry["type"] not in ("tm2", "tim2"):
+                    continue
+                timgs = decode_tim2(entry["data"])
+                for timg in timgs or []:
+                    img = timg.get("image")
+                    if not img:
+                        continue
+                    tbp0 = timg.get("gs_tex0", 0) & 0x3FFF
+                    stem = f"{os.path.splitext(os.path.basename(archive_path))[0]}_{entry['index']}"
+                    if tbp0 >= 0:
+                        found_images_by_tbp0[tbp0] = img
+                        base_timgs_by_tbp0[tbp0] = timg
+                        texture_variants_by_tbp0.setdefault(tbp0, []).append(img)
+                    found_images_by_name[stem.lower()] = img
+        except (OSError, ValueError, struct.error):
+            raise
 
     # Render palette variations from CLUT-only files
     for stem, tbp0, clut_timg in clut_only_entries:
@@ -242,6 +329,7 @@ def find_textures_for_model(file_path, model):
             var_img = render_tim2_clut_variation(base_timg, clut_timg)
             if var_img:
                 found_images_by_name[stem] = var_img
+                texture_variants_by_tbp0.setdefault(tbp0, []).append(var_img)
 
     if not found_images_by_tbp0 and not found_images_by_name:
         return []
@@ -264,9 +352,13 @@ def find_textures_for_model(file_path, model):
     for mat in getattr(model, 'materials', []):
         if mat.texture_index >= 0:
             continue
+        mat_name_clean = mat.name.lower().replace('-', '_').replace(' ', '_').strip()
+        mat_stem = os.path.splitext(mat_name_clean)[0]
         tbp0 = getattr(mat, 'tbp0', 0)
-        if tbp0 > 0 and tbp0 in found_images_by_tbp0:
-            img = found_images_by_tbp0[tbp0]
+        if tbp0 >= 0 and tbp0 in found_images_by_tbp0:
+            variants = texture_variants_by_tbp0.get(tbp0, [])
+            use_variant = '_cl' in mat_stem and len(variants) > 1
+            img = variants[1] if use_variant else found_images_by_tbp0[tbp0]
             if img not in textures:
                 textures.append(img)
             mat.texture_index = textures.index(img)
@@ -309,6 +401,16 @@ def handle_load_file(file_path):
             file_path = os.path.join(file_path, pk_files[0])
         elif mdl_files:
             file_path = os.path.join(file_path, mdl_files[0])
+        else:
+            nested_sgds = []
+            for root, _, files in os.walk(file_path):
+                nested_sgds.extend(
+                    os.path.join(root, f)
+                    for f in files
+                    if f.lower().endswith(".sgd")
+                )
+            if nested_sgds:
+                file_path = sorted(nested_sgds)[0]
 
     ext = os.path.splitext(file_path)[1].lower()
     base_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -320,53 +422,141 @@ def handle_load_file(file_path):
     model_type = "model"
 
     if ext == '.pk2':
-        room = unpack_room_pk2(file_path)
+        room = unpack_room_pk2_pz1(file_path)
         if room['near_sgd']:
             lit_path = os.path.splitext(file_path)[0] + '.lit'
             lit_data = None
             if os.path.exists(lit_path):
                 with open(lit_path, 'rb') as lf:
                     lit_data = lf.read()
-            model = parse_sgd(room['near_sgd'], name=base_name, lit_data=lit_data)
-            textures = find_textures_for_model(file_path, model)
-            model_type = "room"
-
-            # Auto-check for room collision in map_data/msnXXmap.obj
             try:
-                room_num_str = base_name[1:4] # '000'
-                room_idx = int(room_num_str)
-                map_dir = os.path.join(os.path.dirname(os.path.dirname(file_path)), "map_data")
-                if not os.path.exists(map_dir):
-                    map_dir = "f:/Project Zero Modding/Obscura/bin/map_data"
-                if os.path.exists(map_dir):
-                    for msn_idx in range(5):
-                        map_file = os.path.join(map_dir, f"msn0{msn_idx}map.obj")
-                        if os.path.exists(map_file):
-                            with open(map_file, 'rb') as mf:
-                                col_meshes = parse_room_collision_from_map(mf.read(), room_idx=room_idx)
-                                if col_meshes:
-                                    collision.extend(col_meshes)
-                                    break
-            except Exception:
-                pass
+                model = parse_sgd(room['near_sgd'], name=base_name, lit_data=lit_data)
+            except struct.error:
+                model = None
+            if not model:
+                return {"error": f"PK2 does not contain a valid room SGD: {file_path}"}
+            textures = find_textures_for_model(file_path, model)
+            path_lower = os.path.normcase(os.path.abspath(file_path))
+            is_pz1_room = "\\room\\" in path_lower or "/room/" in path_lower
+            model_type = "room" if is_pz1_room else (
+                "character" if "\\character\\" in path_lower or "/character/" in path_lower
+                else "prop"
+            )
+
+            # Auto-check for room collision in map_data/msnXXmap.obj.
+            if is_pz1_room:
+                try:
+                    room_num_str = base_name[1:4] # '000'
+                    room_idx = int(room_num_str)
+                    map_dir = os.path.join(os.path.dirname(os.path.dirname(file_path)), "map_data")
+                    if not os.path.exists(map_dir):
+                        map_dir = "f:/Project Zero Modding/Obscura/bin/map_data"
+                    if os.path.exists(map_dir):
+                        for msn_idx in range(5):
+                            map_file = os.path.join(map_dir, f"msn0{msn_idx}map.obj")
+                            if os.path.exists(map_file):
+                                with open(map_file, 'rb') as mf:
+                                    col_meshes = parse_room_collision_from_map(mf.read(), room_idx=room_idx)
+                                    if col_meshes:
+                                        collision.extend(col_meshes)
+                                        break
+                except Exception:
+                    pass
+
+    elif ext == '.pk4':
+        normalized_path = os.path.normcase(os.path.abspath(file_path))
+        is_room_path = "\\room\\" in normalized_path
+        is_object_path = "\\object\\" in normalized_path
+        is_furniture_path = "\\furniture\\" in normalized_path
+        is_accessory_path = "\\accessory\\" in normalized_path
+        is_fly_path = "\\fly\\" in normalized_path
+        model = parse_pk4_model(
+            file_path,
+            name=base_name,
+            flip_uv=(
+                is_room_path
+                or is_object_path
+                or is_furniture_path
+                or is_accessory_path
+                or is_fly_path
+            )
+        )
+        if model:
+            # Keep the selected archive name for the export folder, even when
+            # the first SGD inside the archive uses a numeric display name.
+            model.name = base_name
+            textures = find_textures_for_model(file_path, model)
+            model_type = "room" if is_room_path else (
+                "character" if "character" in file_path.lower() else "prop"
+            )
+            if model_type == "character":
+                # Load one representative clip automatically. Loading all
+                # 255 BMDs at once creates a very large JSON response and
+                # prevents the animation panel from rendering. Individual
+                # BMDs can still be loaded through "Load animation...".
+                animations = find_matching_bmd_animations(file_path)[:1]
+            if is_room_path:
+                cld_candidates = [
+                    os.path.join(os.path.dirname(file_path), "02_cld"),
+                    os.path.join(os.path.splitext(file_path)[0], "02_cld"),
+                    os.path.join(os.path.dirname(file_path), f"{base_name}_pk4", "02_cld"),
+                    os.path.join(os.path.dirname(os.path.dirname(file_path)), base_name, "02_cld"),
+                ]
+                for cld_dir in cld_candidates:
+                    collision = parse_cld_folder(cld_dir, name=f"{base_name}_collision")
+                    if collision:
+                        break
 
     elif ext == '.sgd':
         with open(file_path, 'rb') as f:
             base_data = f.read()
         model = parse_sgd(base_data, name=base_name)
-        model_type = "prop"
+        path_lower = os.path.normcase(os.path.abspath(file_path))
+        is_room_sgd = "\\room\\" in path_lower or "/room/" in path_lower
+        is_object_sgd = "\\object\\" in path_lower or "/object/" in path_lower
+        is_furniture_sgd = "\\furniture\\" in path_lower or "/furniture/" in path_lower
+        is_accessory_sgd = "\\accessory\\" in path_lower or "/accessory/" in path_lower
+        is_fly_sgd = "\\fly\\" in path_lower or "/fly/" in path_lower
+        model_type = "room" if is_room_sgd else "prop"
+        if not is_room_sgd and "character" in path_lower:
+            model_type = "character"
+            animations = find_matching_bmd_animations(file_path)[:1]
+        if (
+            is_room_sgd
+            or is_object_sgd
+            or is_furniture_sgd
+            or is_accessory_sgd
+            or is_fly_sgd
+        ):
+            flip_uvs_vertical(model)
 
         # ── Auto-merge sibling numbered SGDs (e.g. 0000–0015 for one character) ──
         sgd_dir    = os.path.dirname(file_path)
         sgd_stem   = os.path.splitext(os.path.basename(file_path))[0]
 
         if sgd_stem.isdigit():
+            if not is_room_sgd and int(sgd_stem) == 15:
+                candidates = sorted(
+                    f for f in os.listdir(sgd_dir)
+                    if f.lower().endswith('.sgd')
+                    and os.path.splitext(f)[0].isdigit()
+                    and (is_room_sgd or int(os.path.splitext(f)[0]) not in ({14, 15} if not any(
+                        os.path.splitext(x)[0] == "15" for x in os.listdir(sgd_dir)
+                    ) else {15}))
+                )
+                if candidates:
+                    file_path = os.path.join(sgd_dir, candidates[0])
+                    sgd_stem = os.path.splitext(candidates[0])[0]
+                    with open(file_path, 'rb') as f:
+                        model = parse_sgd(f.read(), name=sgd_stem)
+
             # Collect all sibling numbered SGDs sorted, excluding the file we just loaded
             norm_loaded = os.path.normcase(os.path.abspath(file_path))
             all_numbered = sorted(
                 f for f in os.listdir(sgd_dir)
                 if f.lower().endswith('.sgd')
                 and os.path.splitext(f)[0].isdigit()
+                and (is_room_sgd or int(os.path.splitext(f)[0]) != 15)
                 and os.path.normcase(os.path.join(sgd_dir, f)) != norm_loaded
             )
 
@@ -403,7 +593,7 @@ def handle_load_file(file_path):
 
                 if merged_count > 0:
                     model.name = sgd_stem  # keep original stem as display name
-                    model_type = "character"
+                    model_type = "room" if is_room_sgd else "character"
                     print(f"[merge] Merged {merged_count} sibling SGDs into '{sgd_stem}'")
         # ────────────────────────────────────────────────────────────────────────
 
@@ -423,8 +613,22 @@ def handle_load_file(file_path):
                 except Exception:
                     pass
 
-    elif ext == '.anm':
-        animations = parse_anm(file_path)
+    elif ext in ('.anm', '.bmd'):
+        if ext == '.bmd':
+            clip = parse_bmd_motion(
+                file_path,
+                name=os.path.splitext(os.path.basename(file_path))[0]
+            )
+            animations = [clip] if clip else []
+        else:
+            if os.path.splitext(file_path)[1].lower() == '.bmd':
+                clip = parse_bmd_motion(
+                    file_path,
+                    name=os.path.splitext(os.path.basename(file_path))[0]
+                )
+                animations = [clip] if clip else []
+            else:
+                animations = parse_anm(file_path)
         if CURRENT_STATE["model"]:
             CURRENT_STATE["animations"] = animations
             return {"status": "ok", "animations": [
@@ -437,7 +641,7 @@ def handle_load_file(file_path):
                 } for c in animations
             ]}
         else:
-            return {"error": "Please load a character (.mdl) before loading an animation!"}
+            return {"error": "Please load a character before loading an animation!"}
 
     elif ext == '.obj' and os.path.basename(file_path).lower().startswith('msn'):
         with open(file_path, 'rb') as f:
@@ -449,9 +653,21 @@ def handle_load_file(file_path):
         else:
             return {"error": f"No collision data found in {file_path}"}
 
+    elif ext == '.cld':
+        with open(file_path, 'rb') as f:
+            collision = parse_cld(f.read(), name=base_name)
+        if collision:
+            model = collision_to_sgd_model(collision, name=base_name)
+            model_type = "collision"
+        else:
+            return {"error": f"Failed to parse collision data from {file_path}"}
+
     if not model:
         return {"error": f"Failed to parse model from {file_path}"}
 
+    # The export folder must follow the selected file, not an internal SGD
+    # name such as 0000.
+    model.export_name = os.path.splitext(os.path.basename(file_path))[0]
     CURRENT_STATE["model"] = model
     CURRENT_STATE["textures"] = textures
     CURRENT_STATE["animations"] = animations
@@ -470,9 +686,19 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
 
         if parsed.path == '/api/browse':
             qs = parse_qs(parsed.query)
-            target_dir = qs.get('dir', ['f:/Project Zero Modding/Obscura/bin/3ddata'])[0]
+            target_dir = qs.get('dir', [''])[0].strip()
+            if not target_dir:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Choose a folder first"}).encode('utf-8'))
+                return
             if not os.path.exists(target_dir):
-                target_dir = os.path.abspath('.')
+                self.send_response(404)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "Folder not found"}).encode('utf-8'))
+                return
             
             parent_dir = os.path.dirname(os.path.abspath(target_dir)).replace('\\', '/')
             items = []
@@ -497,7 +723,7 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                     full_p = os.path.join(target_dir, entry)
                     is_dir = os.path.isdir(full_p)
                     ext = os.path.splitext(entry)[1].lower()
-                    if is_dir or ext in ('.pk2', '.pk4', '.sgd', '.mdl', '.anm', '.obj', '.lit', '.tm2', '.png'):
+                    if is_dir or ext in ('.pk2', '.pk4', '.sgd', '.mdl', '.anm', '.bmd', '.cld', '.obj', '.lit', '.tm2', '.png'):
                         t_str = "dir" if is_dir else ext.lstrip('.')
                         # Mark the anchor of a multi-part pack specially
                         if entry in numbered_sgds and hidden_numbered:
@@ -507,7 +733,8 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                                     else f"{entry}  (+{len(hidden_numbered)} parts)",
                             "path": full_p.replace('\\', '/'),
                             "type": t_str,
-                            "is_dir": is_dir
+                            "is_dir": is_dir,
+                            "size": os.path.getsize(full_p) if not is_dir else 0
                         })
             except Exception as e:
                 pass
@@ -600,7 +827,8 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": "No textures loaded for current model."}).encode('utf-8'))
                 return
 
-            base_name = getattr(model, 'name', 'model')
+            source_file = CURRENT_STATE.get("source_file", "")
+            base_name = os.path.splitext(os.path.basename(source_file))[0] or getattr(model, 'export_name', getattr(model, 'name', 'model'))
             tex_subfolder = os.path.join(EXPORTS_DIR, f"{base_name}_textures")
             saved = export_textures_png(model, textures, tex_subfolder)
 
@@ -692,7 +920,7 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
 
                 try:
                     if fmt in ('glb', 'gltf'):
-                        export_glb(col_model, out_path, export_t_pose=True, include_vertex_colors=True)
+                        export_glb(col_model, out_path, export_t_pose=True, include_vertex_colors=True, include_armature=False)
                     elif fmt == 'obj':
                         export_obj(col_model, out_path, include_vertex_colors=True)
                     elif fmt == 'dae':
@@ -737,16 +965,26 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": "No model loaded"}).encode('utf-8'))
                 return
 
-            base_name = getattr(model, 'name', 'model')
+            source_file = CURRENT_STATE.get("source_file", "")
+            base_name = os.path.splitext(os.path.basename(source_file))[0]
+            if not base_name:
+                base_name = getattr(model, 'export_name', '') or getattr(model, 'name', 'model')
+            base_name = os.path.basename(base_name) or 'model'
+            selected_destination = req.get('destination') or ''
+            if selected_destination:
+                asset_export_dir = os.path.abspath(os.path.expanduser(selected_destination))
+            else:
+                asset_export_dir = os.path.join(EXPORTS_DIR, base_name)
+            os.makedirs(asset_export_dir, exist_ok=True)
             export_filename = f"{base_name}.{fmt}"
-            out_path = os.path.join(EXPORTS_DIR, export_filename)
+            out_path = os.path.join(asset_export_dir, export_filename)
 
             textures = CURRENT_STATE["textures"] if include_textures else []
             animations = None if tpose_only else CURRENT_STATE["animations"]
 
             try:
                 # Always extract and convert textures to PNG in exports folder
-                tex_subfolder = os.path.join(EXPORTS_DIR, f"{base_name}_textures")
+                tex_subfolder = os.path.join(asset_export_dir, f"{base_name}_textures")
                 saved_tex = []
                 if textures and include_textures:
                     saved_tex = export_textures_png(model, textures, tex_subfolder)
@@ -754,22 +992,23 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                 # Check if zip bundle requested or textures only
                 if fmt in ('zip', 'glb_zip', 'obj_zip') or target == 'textures':
                     zip_filename = f"{base_name}_with_textures.zip" if target != 'textures' else f"{base_name}_textures.zip"
-                    zip_path = os.path.join(EXPORTS_DIR, zip_filename)
+                    zip_path = os.path.join(asset_export_dir, zip_filename)
                     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
                         if target != 'textures':
                             if fmt == 'obj_zip':
-                                obj_path = os.path.join(EXPORTS_DIR, f"{base_name}.obj")
+                                obj_path = os.path.join(asset_export_dir, f"{base_name}.obj")
                                 export_obj(model, obj_path, include_vertex_colors=include_colors, textures=textures)
                                 zf.write(obj_path, arcname=f"{base_name}.obj")
-                                mtl_path = os.path.join(EXPORTS_DIR, f"{base_name}.mtl")
+                                mtl_path = os.path.join(asset_export_dir, f"{base_name}.mtl")
                                 if os.path.exists(mtl_path):
                                     zf.write(mtl_path, arcname=f"{base_name}.mtl")
                             else:
-                                glb_path = os.path.join(EXPORTS_DIR, f"{base_name}.glb")
+                                glb_path = os.path.join(asset_export_dir, f"{base_name}.glb")
                                 export_glb(model, glb_path, export_t_pose=tpose_only,
                                            animations=animations,
                                            include_vertex_colors=include_colors,
-                                           textures=textures)
+                                           textures=textures,
+                                           include_armature=(CURRENT_STATE.get("model_type") != "room"))
                                 zf.write(glb_path, arcname=f"{base_name}.glb")
 
                         # Add all texture PNGs
@@ -791,7 +1030,8 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                     export_glb(model, out_path, export_t_pose=tpose_only,
                                animations=animations,
                                include_vertex_colors=include_colors,
-                               textures=textures)
+                               textures=textures,
+                               include_armature=(CURRENT_STATE.get("model_type") != "room"))
                 elif fmt == 'obj':
                     export_obj(model, out_path,
                                include_vertex_colors=include_colors,
