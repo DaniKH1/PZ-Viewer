@@ -1,5 +1,6 @@
 import struct
 import math
+import os
 
 class CollisionMesh:
     def __init__(self, name="collision"):
@@ -10,6 +11,108 @@ class CollisionMesh:
         self.normals = []     # [nx, ny, nz]
         self.uvs = []         # [u, v]
         self.type = "mesh"    # "polygon", "prism_3d", "box", "sphere"
+
+def _append_box(mesh, minimum, maximum):
+    """Append a closed AABB using the native room collision coordinates."""
+    x0, y0, z0 = minimum
+    x1, y1, z1 = maximum
+    base = len(mesh.positions)
+    mesh.positions.extend([
+        [x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0],
+        [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1],
+    ])
+    mesh.colors.extend([[0.1, 0.9, 0.4, 0.5]] * 8)
+    mesh.indices.extend([
+        [base + 0, base + 2, base + 1], [base + 0, base + 3, base + 2],
+        [base + 4, base + 5, base + 6], [base + 4, base + 6, base + 7],
+        [base + 0, base + 1, base + 5], [base + 0, base + 5, base + 4],
+        [base + 1, base + 2, base + 6], [base + 1, base + 6, base + 5],
+        [base + 2, base + 3, base + 7], [base + 2, base + 7, base + 6],
+        [base + 3, base + 0, base + 4], [base + 3, base + 4, base + 7],
+    ])
+
+def parse_cld(data, name="room_cld"):
+    """Parse the compact FF3 room CLD records found under ``02_cld``.
+
+    CLD files have a 16-byte header.  The first word is the record count and
+    each record is 48 bytes.  Records contain packed collision bounds plus
+    plane metadata; the bounds are recovered from their finite float fields.
+    """
+    if len(data) < 16:
+        return []
+    record_count, version, _, _ = struct.unpack_from("<4I", data, 0)
+    if record_count == 0 or record_count > 4096 or version > 0x100:
+        return []
+    if 16 + record_count * 48 > len(data):
+        return []
+
+    meshes = []
+    for record_index in range(record_count):
+        offset = 16 + record_index * 48
+        primitive_type, primitive_flags = struct.unpack_from("<2I", data, offset)
+        values = list(struct.unpack_from("<10f", data, offset + 8))
+        finite_values = [
+            value for value in values
+            if math.isfinite(value) and abs(value) < 100000.0
+        ]
+        if len(finite_values) < 3:
+            continue
+
+        # Type 2 CLD records are compact primitive descriptions rather than
+        # triangle lists. Their float payload combines bounds and primitive
+        # parameters, so reconstruct the conservative box from all finite
+        # coordinates while keeping the two integer fields available for
+        # future type-specific decoding.
+        points = [
+            finite_values[index:index + 3]
+            for index in range(0, len(finite_values) - 2, 3)
+        ]
+        minimum = [
+            min(point[axis] for point in points if len(point) == 3)
+            for axis in range(3)
+        ]
+        maximum = [
+            max(point[axis] for point in points if len(point) == 3)
+            for axis in range(3)
+        ]
+        if any((maximum[i] - minimum[i]) > 100000.0 for i in range(3)):
+            continue
+        epsilon = 0.01
+        for axis in range(3):
+            if maximum[axis] - minimum[axis] < epsilon:
+                minimum[axis] -= epsilon
+                maximum[axis] += epsilon
+        mesh = CollisionMesh(f"{name}_{record_index:04d}")
+        mesh.type = "box"
+        _append_box(mesh, minimum, maximum)
+        # Preserve the source primitive classification for callers that need
+        # to distinguish future CLD shape decoders.
+        mesh.primitive_types = [{
+            "index": record_index,
+            "type": primitive_type,
+            "flags": primitive_flags,
+            "minimum": minimum,
+            "maximum": maximum,
+            "vertex_start": 0,
+        }]
+        if mesh.positions:
+            meshes.append(mesh)
+    return meshes
+
+def parse_cld_folder(folder, name="room_cld"):
+    """Load all validated CLD files from an extracted ``02_cld`` folder."""
+    if not os.path.isdir(folder):
+        return []
+    meshes = []
+    for filename in sorted(os.listdir(folder)):
+        if not filename.lower().endswith(".cld"):
+            continue
+        path = os.path.join(folder, filename)
+        if not os.path.isfile(path):
+            continue
+        with open(path, "rb") as handle:
+            meshes.extend(parse_cld(handle.read(), f"{name}_{os.path.splitext(filename)[0]}"))
+    return meshes
 
 def line_cross(line0, line1):
     a0, b0, c0 = line0

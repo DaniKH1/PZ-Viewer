@@ -19,9 +19,9 @@ class PZViewerApp {
     this.baseFps = 30;
 
     this.shadingMode = 'textured';
-    this.showCollision = true;
+    this.exportDestination = '';
+    this.showCollision = false;
     this.showBones = false;
-    this.flashlightOn = false;
 
     this.initThreeGPU();
     this.detectGPUInfo();
@@ -32,7 +32,9 @@ class PZViewerApp {
     requestAnimationFrame(this.animate);
 
     const inputDir = document.getElementById('input-dir');
-    this.browseDir(inputDir ? inputDir.value : 'f:/Project Zero Modding/Obscura/bin/3ddata');
+    if (inputDir && inputDir.value.trim()) {
+      this.browseDir(inputDir.value.trim());
+    }
   }
 
   initThreeGPU() {
@@ -67,11 +69,6 @@ class PZViewerApp {
     this.dirLight.position.set(120, 260, 180);
     this.scene.add(this.dirLight);
 
-    this.flashlight = new THREE.SpotLight(0xfffaea, 0, 8000, Math.PI / 5, 0.4, 0.6);
-    this.camera.add(this.flashlight);
-    this.flashlight.position.set(0, 0, 0);
-    this.flashlight.target.position.set(0, 0, -100);
-    this.camera.add(this.flashlight.target);
     this.scene.add(this.camera);
 
     this.grid = new THREE.GridHelper(1200, 60, 0x3f4458, 0x242731);
@@ -86,7 +83,7 @@ class PZViewerApp {
     this.collisionGroup = new THREE.Group();
 
     this.bonesGroup.visible = false;
-    this.collisionGroup.visible = true;
+    this.collisionGroup.visible = false;
 
     this.scene.add(this.modelGroup);
     this.scene.add(this.bonesGroup);
@@ -157,6 +154,7 @@ class PZViewerApp {
     const refreshBtn = document.getElementById('btn-browse-refresh');
     const chooseFolderBtn = document.getElementById('btn-choose-folder');
     const dirUpBtn = document.getElementById('btn-dir-up');
+    const fileFilter = document.getElementById('file-filter');
 
     if (dirGo && dirInput) {
       dirGo.addEventListener('click', () => this.browseDir(dirInput.value));
@@ -188,6 +186,9 @@ class PZViewerApp {
         }
       });
     }
+    if (fileFilter) {
+      fileFilter.addEventListener('input', () => this.filterBrowserItems(fileFilter.value));
+    }
 
     const shadingSelect = document.getElementById('select-shading');
     if (shadingSelect) {
@@ -213,13 +214,11 @@ class PZViewerApp {
       });
     }
 
-    const chkLight = document.getElementById('chk-flashlight');
-    if (chkLight) {
-      chkLight.addEventListener('change', (e) => {
-        this.flashlightOn = e.target.checked;
-        this.flashlight.intensity = this.flashlightOn ? 2.8 : 0;
-      });
-    }
+    const layersModal = document.getElementById('layers-modal');
+    document.getElementById('btn-mesh-layers')?.addEventListener('click', () => layersModal?.classList.remove('hidden'));
+    document.getElementById('btn-close-layers')?.addEventListener('click', () => layersModal?.classList.add('hidden'));
+    document.getElementById('btn-layers-all')?.addEventListener('click', () => this.setAllMeshLayers(true));
+    document.getElementById('btn-layers-none')?.addEventListener('click', () => this.setAllMeshLayers(false));
 
     const resetCam = document.getElementById('btn-reset-cam');
     if (resetCam) {
@@ -388,6 +387,28 @@ class PZViewerApp {
     const fbxLbl = document.getElementById('lbl-fmt-fbx');
     const titleEl = document.getElementById('export-modal-title');
     const btnDo = document.getElementById('btn-modal-do-export');
+    const destinationEl = document.getElementById('export-destination');
+    const chooseExportBtn = document.getElementById('btn-choose-export-folder');
+    const assetName = (this.currentModelData && (this.currentModelData.filename || this.currentModelData.name)) || 'asset';
+    if (destinationEl) {
+      const root = this.exportDestination || 'PZViewer/Exports';
+      destinationEl.textContent = root + '/' + assetName.replace(/\.[^.]+$/, '') + '/';
+    }
+    if (chooseExportBtn && !chooseExportBtn.dataset.bound) {
+      chooseExportBtn.dataset.bound = 'true';
+      chooseExportBtn.addEventListener('click', async () => {
+        try {
+          const res = await fetch('/api/choose_folder?dir=' + encodeURIComponent(this.exportDestination || ''));
+          const data = await res.json();
+          if (data.chosen) {
+            this.exportDestination = data.chosen;
+            this.updateExportTargetUI(target);
+          }
+        } catch (err) {
+          this.showToast('Folder picker error: ' + err.message, 'error');
+        }
+      });
+    }
 
     if (target === 'collision') {
       if (modelOpts) modelOpts.classList.add('hidden');
@@ -395,15 +416,19 @@ class PZViewerApp {
       if (daeLbl) daeLbl.classList.add('hidden');
       if (fbxLbl) fbxLbl.classList.add('hidden');
       if (titleEl) titleEl.textContent = 'Export 3D Collision Geometry';
-      if (btnDo) btnDo.textContent = 'Download Collision (.glb / .obj)';
+      if (btnDo) btnDo.textContent = 'Export';
     } else {
       if (modelOpts) modelOpts.classList.remove('hidden');
       if (colOpts) colOpts.classList.add('hidden');
       if (daeLbl) daeLbl.classList.remove('hidden');
       if (fbxLbl) fbxLbl.classList.remove('hidden');
       if (titleEl) titleEl.textContent = 'Export 3D Model';
-      if (btnDo) btnDo.textContent = 'Download Export';
+      if (btnDo) btnDo.textContent = 'Export';
     }
+    const vertexColorsLabel = document.getElementById('lbl-exp-vcolors');
+    const isRoom = this.currentModelData &&
+      (this.currentModelData.model_type === 'room' || this.currentModelData.type === 'room');
+    if (vertexColorsLabel) vertexColorsLabel.classList.toggle('hidden', !isRoom);
   }
 
   initEventListeners() {
@@ -443,6 +468,8 @@ class PZViewerApp {
         inputDir.value = data.current_dir;
       }
       this.currentParentDir = data.parent_dir;
+      const location = document.getElementById('browser-location');
+      if (location) location.textContent = data.current_dir;
       const dirUpBtn = document.getElementById('btn-dir-up');
       if (dirUpBtn) {
         dirUpBtn.disabled = !data.parent_dir || data.parent_dir === data.current_dir;
@@ -464,9 +491,12 @@ class PZViewerApp {
         data.items.forEach(item => {
           const row = document.createElement('div');
           row.className = 'file-item ' + (item.is_dir ? 'dir' : 'file-' + item.type);
-          const iconMap = { sgd_pack: '🧩', sgd: '📄', mdl: '🤖', anm: '🎬', tm2: '🖼️', png: '🖼️', pk2: '📦', pk4: '📦' };
+          row.dataset.search = (item.name + ' ' + item.type).toLowerCase();
+          const iconMap = { sgd_pack: '🧩', sgd: '📄', mdl: '🤖', anm: '🎬', bmd: '🎬', cld: '🛡️', tm2: '🖼️', png: '🖼️', pk2: '📦', pk4: '📦' };
           const icon = item.is_dir ? '📁' : (iconMap[item.type] || '📄');
-          row.innerHTML = '<span>' + icon + '</span> <span>' + item.name + '</span>';
+          const size = item.is_dir ? 'folder' : this.formatFileSize(item.size);
+          row.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' +
+            item.name + '</span><span class="file-meta">' + size + '</span>';
 
           row.addEventListener('click', () => {
             if (item.is_dir) {
@@ -483,6 +513,20 @@ class PZViewerApp {
     } catch (e) {
       fileListEl.innerHTML = '<div class="loading-hint" style="color: #ef4444;">Error: ' + e.message + '</div>';
     }
+  }
+
+  filterBrowserItems(query) {
+    const needle = query.trim().toLowerCase();
+    document.querySelectorAll('#file-list .file-item').forEach(row => {
+      row.hidden = !!needle && !(row.dataset.search || '').includes(needle);
+    });
+  }
+
+  formatFileSize(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
   showLoading(text) {
@@ -519,6 +563,7 @@ class PZViewerApp {
       }
 
       this.currentModelData = data;
+      this.buildMeshLayers(data);
 
       // Shading mode defaults to textured for all model types (rooms, characters, props)
       const shadingSelect = document.getElementById('select-shading');
@@ -586,6 +631,7 @@ class PZViewerApp {
   }
 
   buildGPUScene(data) {
+    const isRoomAsset = data.model_type === 'room' || data.type === 'room';
     while (this.modelGroup.children.length) {
       const obj = this.modelGroup.children[0];
       if (obj.geometry) obj.geometry.dispose();
@@ -608,6 +654,9 @@ class PZViewerApp {
       data.textures.forEach((tex, idx) => {
         if (tex.data_uri) {
           const threeTex = loader.load(tex.data_uri);
+          // Character UVs are normalized by the SGD parser. Rooms retain the
+          // existing image-side flip used by their room UV convention.
+          threeTex.flipY = true;
           threeTex.colorSpace = THREE.SRGBColorSpace;
           threeTex.wrapS = THREE.RepeatWrapping;
           threeTex.wrapT = THREE.RepeatWrapping;
@@ -659,10 +708,14 @@ class PZViewerApp {
         geom.computeBoundingBox();
 
         const tex = this.textures[meshData.tex_id];
+        const isRoom = isRoomAsset;
+        const meshSide = isRoom ? THREE.FrontSide : THREE.DoubleSide;
         const mat = new THREE.MeshStandardMaterial({
           map: tex || null,
           vertexColors: hasColors,
-          side: THREE.DoubleSide,
+          side: meshSide,
+          transparent: true,
+          alphaTest: 0.01,
           roughness: 0.82,
           metalness: 0.08
         });
@@ -686,6 +739,16 @@ class PZViewerApp {
 
     if (data.collision) {
       this.buildCollisionVisualizer(data.collision);
+      const hasCollision = (data.collision.boxes && data.collision.boxes.length > 0) ||
+        (data.collision.polygons && data.collision.polygons.length > 0) ||
+        (data.collision.spheres && data.collision.spheres.length > 0);
+      if (hasCollision && this.currentModelData && this.currentModelData.model_type === 'collision') {
+        this.showCollision = true;
+        this.collisionGroup.visible = true;
+        this.modelGroup.visible = true;
+        const chkCollision = document.getElementById('chk-collision');
+        if (chkCollision) chkCollision.checked = true;
+      }
     }
 
     this.renderer.compile(this.scene, this.camera);
@@ -699,7 +762,7 @@ class PZViewerApp {
     this.boneNodes = [];
     const linePositions = [];
 
-    bones.forEach(b => {
+    bones.forEach((b) => {
       const marker = new THREE.Mesh(sphereGeom, sphereMat);
       marker.position.set(b.pos[0], b.pos[1], b.pos[2]);
       this.bonesGroup.add(marker);
@@ -785,9 +848,22 @@ class PZViewerApp {
       collision.boxes.forEach(b => {
         const min = new THREE.Vector3(b.min[0], b.min[1], b.min[2]);
         const max = new THREE.Vector3(b.max[0], b.max[1], b.max[2]);
-        const box = new THREE.Box3(min, max);
-        const helper = new THREE.Box3Helper(box, 0xf59e0b);
-        this.collisionGroup.add(helper);
+        const size = new THREE.Vector3().subVectors(max, min);
+        const center = new THREE.Vector3().addVectors(min, max).multiplyScalar(0.5);
+        const boxGeom = new THREE.BoxGeometry(
+          Math.max(size.x, 0.02),
+          Math.max(size.y, 0.02),
+          Math.max(size.z, 0.02)
+        );
+        const boxMat = new THREE.MeshBasicMaterial({
+          color: 0xf59e0b,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.95
+        });
+        const boxMesh = new THREE.Mesh(boxGeom, boxMat);
+        boxMesh.position.copy(center);
+        this.collisionGroup.add(boxMesh);
       });
     }
   }
@@ -796,13 +872,29 @@ class PZViewerApp {
     this.modelGroup.traverse(child => {
       if (child.isMesh && child.userData) {
         const ud = child.userData;
+        const isRoom = this.currentModelData &&
+          (this.currentModelData.model_type === 'room' || this.currentModelData.type === 'room');
 
         switch (this.shadingMode) {
           case 'textured':
             child.material = new THREE.MeshStandardMaterial({
               map: ud.hasTexture ? child.material.map || ud.originalMat.map : null,
+              vertexColors: false,
+              side: isRoom ? THREE.FrontSide : THREE.DoubleSide,
+              transparent: true,
+              alphaTest: 0.01,
+              roughness: 0.82,
+              metalness: 0.08
+            });
+            break;
+
+          case 'textured_vertex':
+            child.material = new THREE.MeshStandardMaterial({
+              map: ud.hasTexture ? child.material.map || ud.originalMat.map : null,
               vertexColors: ud.hasColors,
-              side: THREE.DoubleSide,
+              side: isRoom ? THREE.FrontSide : THREE.DoubleSide,
+              transparent: true,
+              alphaTest: 0.01,
               roughness: 0.82,
               metalness: 0.08
             });
@@ -812,7 +904,7 @@ class PZViewerApp {
             child.material = new THREE.MeshBasicMaterial({
               vertexColors: ud.hasColors,
               color: ud.hasColors ? 0xffffff : 0x888888,
-              side: THREE.DoubleSide
+              side: isRoom ? THREE.FrontSide : THREE.DoubleSide
             });
             break;
 
@@ -828,12 +920,41 @@ class PZViewerApp {
               color: 0xdddddd,
               roughness: 0.6,
               metalness: 0.1,
-              side: THREE.DoubleSide
+              side: isRoom ? THREE.FrontSide : THREE.DoubleSide
             });
             break;
         }
       }
     });
+  }
+
+  buildMeshLayers(data) {
+    const panel = document.getElementById('mesh-layers');
+    if (!panel) return;
+    panel.innerHTML = '';
+    (data.meshes || []).forEach((meshData, index) => {
+      const label = document.createElement('label');
+      label.className = 'mesh-layer-row';
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = true;
+      checkbox.addEventListener('change', () => {
+        const mesh = this.modelGroup.children[index];
+        if (mesh) mesh.visible = checkbox.checked;
+      });
+      const text = document.createElement('span');
+      text.textContent = meshData.name || `Mesh ${index + 1}`;
+      label.append(checkbox, text);
+      panel.appendChild(label);
+    });
+    if (!data.meshes || data.meshes.length === 0) {
+      panel.innerHTML = '<span class="muted">No mesh layers.</span>';
+    }
+  }
+
+  setAllMeshLayers(visible) {
+    this.modelGroup.children.forEach(mesh => { mesh.visible = visible; });
+    document.querySelectorAll('#mesh-layers input[type="checkbox"]').forEach(box => { box.checked = visible; });
   }
 
   setupAnimations(clips) {
@@ -925,66 +1046,9 @@ class PZViewerApp {
   }
 
   applyAnimationFrame(frame) {
-    if (!this.currentAnimData || !this.currentAnimData[this.currentClipIndex]) return;
-    const clip = this.currentAnimData[this.currentClipIndex];
-    if (!clip.frames || !this.boneNodes || this.boneNodes.length === 0) return;
-
-    const frameData = clip.frames[frame];
-    if (!frameData) return;
-    const bonesList = Array.isArray(frameData) ? frameData : (frameData.bones || []);
-
-    const worldTransforms = {};
-    worldTransforms[0] = new THREE.Matrix4().identity();
-
-    for (let i = 0; i < bonesList.length; i++) {
-      const bTrack = bonesList[i];
-      const bIdx = i + 1; // clip bone i maps to model bone i + 1
-      const parentIdx = (clip.parent_ids && clip.parent_ids[i] !== undefined && clip.parent_ids[i] !== 0xFF)
-                        ? clip.parent_ids[i]
-                        : (this.boneNodes[bIdx] ? this.boneNodes[bIdx].parent : 0);
-
-      const localMat = new THREE.Matrix4();
-      const tx = (bTrack && bTrack.trans) ? bTrack.trans[0] : 0;
-      const ty = (bTrack && bTrack.trans) ? bTrack.trans[1] : 0;
-      const tz = (bTrack && bTrack.trans) ? bTrack.trans[2] : 0;
-
-      const rx = (bTrack && bTrack.rot) ? bTrack.rot[0] : 0;
-      const ry = (bTrack && bTrack.rot) ? bTrack.rot[1] : 0;
-      const rz = (bTrack && bTrack.rot) ? bTrack.rot[2] : 0;
-
-      const euler = new THREE.Euler(rx, ry, rz, 'XYZ');
-      const quat = new THREE.Quaternion().setFromEuler(euler);
-      const transVec = new THREE.Vector3(tx, ty, tz);
-      localMat.compose(transVec, quat, new THREE.Vector3(1, 1, 1));
-
-      const parentMat = worldTransforms[parentIdx] || worldTransforms[0];
-      const worldMat = new THREE.Matrix4().multiplyMatrices(parentMat, localMat);
-      worldTransforms[bIdx] = worldMat;
-
-      if (bIdx < this.boneNodes.length) {
-        const bn = this.boneNodes[bIdx];
-        const wPos = new THREE.Vector3();
-        const wQuat = new THREE.Quaternion();
-        const wScl = new THREE.Vector3();
-        worldMat.decompose(wPos, wQuat, wScl);
-        bn.mesh.position.copy(wPos);
-        bn.mesh.quaternion.copy(wQuat);
-      }
-    }
-
-    // Update lines between animated bones
-    const linePositions = [];
-    this.boneNodes.forEach(bn => {
-      if (bn.parent >= 0 && bn.parent < this.boneNodes.length) {
-        const p = this.boneNodes[bn.parent];
-        linePositions.push(bn.mesh.position.x, bn.mesh.position.y, bn.mesh.position.z);
-        linePositions.push(p.mesh.position.x, p.mesh.position.y, p.mesh.position.z);
-      }
-    });
-    if (this.boneLineGeom && linePositions.length > 0) {
-      this.boneLineGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(linePositions), 3));
-      this.boneLineGeom.attributes.position.needsUpdate = true;
-    }
+    // BMD transform decoding is still experimental; keep the model in its
+    // known rest pose until the track-to-bone mapping is validated.
+    this.resetToTPose();
   }
 
   updateStatsUI(data) {
@@ -1049,7 +1113,8 @@ class PZViewerApp {
 
     const fmtRadio = document.querySelector('input[name="export-fmt"]:checked');
     const format = fmtRadio ? fmtRadio.value : 'glb';
-    const includeColors = document.getElementById('exp-vcolors')?.checked ?? true;
+    const isRoom = this.currentModelData.model_type === 'room' || this.currentModelData.type === 'room';
+    const includeColors = isRoom && (document.getElementById('exp-vcolors')?.checked ?? true);
     const includeTextures = document.getElementById('exp-textures')?.checked ?? true;
     const tposeOnly = document.getElementById('exp-tpose')?.checked ?? true;
     const statusEl = document.getElementById('export-status');
@@ -1065,7 +1130,8 @@ class PZViewerApp {
         include_colors: includeColors,
         include_textures: includeTextures,
         include_collision: true,
-        tpose_only: tposeOnly
+        tpose_only: tposeOnly,
+        destination: this.exportDestination || ''
       };
 
       const res = await fetch('/api/export', {
@@ -1080,7 +1146,7 @@ class PZViewerApp {
       }
 
       const blob = await res.blob();
-      const base = this.currentModelData.filename || 'export';
+      const base = (this.currentModelData.filename || this.currentModelData.name || 'export').replace(/\.[^.]+$/, '');
       let filename = target === 'collision' ? `${base}_collision.${format}` : `${base}.${format}`;
       if (format.includes('zip')) {
         filename = `${base}_bundle.zip`;
@@ -1100,6 +1166,8 @@ class PZViewerApp {
       const modal = document.getElementById('export-modal');
       if (modal) modal.classList.add('hidden');
 
+      this.exportDestination = '';
+      this.updateExportTargetUI(target);
       this.showToast('Saved ' + filename + ' to downloads!', 'success');
     } catch (err) {
       this.showToast('Export error: ' + err.message, 'error');
