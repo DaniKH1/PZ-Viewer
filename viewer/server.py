@@ -849,10 +849,6 @@ def handle_load_file(file_path):
             name=base_name,
             flip_uv=False
         )
-        if model:
-            # FF3 PK4 images need the opposite WebGL image origin; vertex UVs
-            # are already in the parser's coordinate convention.
-            model.uvs_are_flipped = True
         progress.log(
             "pk4_extraction",
             f"status=complete meshes={len(getattr(model, 'meshes', [])) if model else 0}"
@@ -865,6 +861,9 @@ def handle_load_file(file_path):
             model_type = "room" if is_room_path else (
                 "character" if "character" in file_path.lower() else "prop"
             )
+            # FF3 room images need the WebGL-origin inversion, while FF3
+            # character atlases already match the parsed character UVs.
+            model.uvs_are_flipped = model_type != "character"
             if model_type == "character":
                 # Load one representative clip automatically. Loading all
                 # 255 BMDs at once creates a very large JSON response and
@@ -907,8 +906,6 @@ def handle_load_file(file_path):
         parse_sgd = parse_sgd_ff1 if use_ff1_parser else parse_sgd_ff3
         merge_sgd = merge_sgd_models if use_ff1_parser else merge_sgd_ff3
         model = parse_sgd(base_data, name=base_name, lit_data=lit_data)
-        if not use_ff1_parser and model:
-            model.uvs_are_flipped = True
         sgd_parse_metrics["sgd_processed"] += 1
         for key, value in getattr(model, "parse_diagnostics", {}).items():
             if key in sgd_parse_metrics:
@@ -931,6 +928,8 @@ def handle_load_file(file_path):
         if not is_room_sgd and "character" in path_lower:
             model_type = "character"
             animations = find_matching_bmd_animations(file_path)[:1]
+        if not use_ff1_parser:
+            model.uvs_are_flipped = model_type != "character"
 
         # ── Auto-merge sibling numbered SGDs (e.g. 0000–0015 for one character) ──
         sgd_dir    = os.path.dirname(file_path)
