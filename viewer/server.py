@@ -847,18 +847,11 @@ def handle_load_file(file_path):
         model = parse_pk4_model(
             file_path,
             name=base_name,
-            flip_uv=(
-                is_object_path
-                or is_furniture_path
-                or is_accessory_path
-                or is_fly_path
-            )
+            # FF3 PK4 SGD UVs need one vertex-space vertical conversion.
+            # Do it in the PK4 parser for every asset; the serialized flag
+            # then keeps the viewer from applying a second image flip.
+            flip_uv=True
         )
-        # PK4 FF3 textures use the PS2 bottom-left image origin.  Room PK4s
-        # intentionally keep their parsed vertex UVs unchanged, so the
-        # renderer must invert the uploaded texture rather than the UVs.
-        if model:
-            model.uvs_are_flipped = True
         progress.log(
             "pk4_extraction",
             f"status=complete meshes={len(getattr(model, 'meshes', [])) if model else 0}"
@@ -935,13 +928,7 @@ def handle_load_file(file_path):
         if not is_room_sgd and "character" in path_lower:
             model_type = "character"
             animations = find_matching_bmd_animations(file_path)[:1]
-        if (
-            is_room_sgd
-            or is_object_sgd
-            or is_furniture_sgd
-            or is_accessory_sgd
-            or is_fly_sgd
-        ):
+        if not use_ff1_parser:
             flip_uvs_vertical(model)
 
         # ── Auto-merge sibling numbered SGDs (e.g. 0000–0015 for one character) ──
