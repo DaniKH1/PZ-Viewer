@@ -3,7 +3,7 @@
 import os
 import struct
 
-from .pz_sgd import parse_sgd
+from .pz_sgd_ff3 import merge_sgd_models, parse_sgd as parse_sgd_ff3
 
 
 def _read_data(data_or_path):
@@ -76,6 +76,20 @@ def flip_uvs_vertical(model):
     return model
 
 
+def flip_named_mesh_uvs(model, mesh_names):
+    """Flip UVs once for the specifically named meshes in a parsed model."""
+    names = frozenset(mesh_names)
+    applied = getattr(model, "_named_uv_flips", set())
+    if names in applied:
+        return model
+    for mesh in getattr(model, "meshes", []):
+        if mesh.name in names:
+            mesh.uvs = [[u, 1.0 - v] for u, v in mesh.uvs]
+    applied.add(names)
+    model._named_uv_flips = applied
+    return model
+
+
 def parse_pk4_model(data_or_path, name="model", flip_uv=False):
     """Parse and merge SGD models in a PK4/MPK hierarchy."""
     if isinstance(data_or_path, (str, os.PathLike)):
@@ -95,7 +109,7 @@ def parse_pk4_model(data_or_path, name="model", flip_uv=False):
             sgd_entries = [entry for entry in sgd_entries if entry["index"] != collision_index]
     base_model = None
     for entry in sgd_entries:
-        model = parse_sgd(
+        model = parse_sgd_ff3(
             entry["data"],
             name=name,
             external_bones=base_model.bones if base_model and base_model.bones else None,
@@ -105,6 +119,5 @@ def parse_pk4_model(data_or_path, name="model", flip_uv=False):
         if base_model is None:
             base_model = model
         else:
-            from .pz_sgd import merge_sgd_models
             merge_sgd_models(base_model, model)
     return flip_uvs_vertical(base_model) if base_model and flip_uv else base_model

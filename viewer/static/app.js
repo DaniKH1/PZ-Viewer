@@ -27,6 +27,7 @@ class PZViewerApp {
     this.detectGPUInfo();
     this.initUI();
     this.initEventListeners();
+    this.restoreGamePaths();
 
     this.animate = this.animate.bind(this);
     requestAnimationFrame(this.animate);
@@ -152,7 +153,6 @@ class PZViewerApp {
     const dirInput = document.getElementById('input-dir');
     const dirGo = document.getElementById('btn-dir-go');
     const refreshBtn = document.getElementById('btn-browse-refresh');
-    const chooseFolderBtn = document.getElementById('btn-choose-folder');
     const dirUpBtn = document.getElementById('btn-dir-up');
     const fileFilter = document.getElementById('file-filter');
 
@@ -164,20 +164,6 @@ class PZViewerApp {
     }
     if (refreshBtn && dirInput) {
       refreshBtn.addEventListener('click', () => this.browseDir(dirInput.value));
-    }
-    if (chooseFolderBtn && dirInput) {
-      chooseFolderBtn.addEventListener('click', async () => {
-        try {
-          const res = await fetch('/api/choose_folder?dir=' + encodeURIComponent(dirInput.value));
-          const data = await res.json();
-          if (data.chosen) {
-            dirInput.value = data.chosen;
-            this.browseDir(data.chosen);
-          }
-        } catch (err) {
-          console.error('Folder picker error:', err);
-        }
-      });
     }
     if (dirUpBtn) {
       dirUpBtn.addEventListener('click', () => {
@@ -284,17 +270,17 @@ class PZViewerApp {
       });
     }
 
-    const btnLoadAnm = document.getElementById('btn-load-anm');
-    if (btnLoadAnm) {
-      btnLoadAnm.addEventListener('click', () => {
-        const animPath = prompt('Enter path to .anm animation file:');
+    const btnLoadAnimation = document.getElementById('btn-load-animation');
+    if (btnLoadAnimation) {
+      btnLoadAnimation.addEventListener('click', () => {
+        const animPath = prompt('Enter path to .bmd animation file:');
         if (animPath) this.loadAnimation(animPath);
       });
     }
 
-    const btnDetachAnm = document.getElementById('btn-detach-anm');
-    if (btnDetachAnm) {
-      btnDetachAnm.addEventListener('click', () => this.detachAnimation());
+    const btnDetachAnimation = document.getElementById('btn-detach-animation');
+    if (btnDetachAnimation) {
+      btnDetachAnimation.addEventListener('click', () => this.detachAnimation());
     }
 
     const btnExportModal = document.getElementById('btn-export-modal');
@@ -453,15 +439,170 @@ class PZViewerApp {
     });
   }
 
-  async browseDir(dirPath) {
+  async restoreGamePaths() {
+    try {
+      const response = await fetch('/api/preferences?_=' + Date.now(), { cache: 'no-store' });
+      if (response.ok) {
+        const savedPaths = await response.json();
+        ['ff1', 'ff2', 'ff3'].forEach((game) => {
+          if (savedPaths[game]) {
+            localStorage.setItem('pzviewer.' + game + 'Path', savedPaths[game]);
+          }
+        });
+        localStorage.setItem('pzviewer.savedPaths', JSON.stringify(savedPaths));
+      }
+    } catch (err) {
+      console.warn('Server folder preferences could not be read:', err);
+    }
+    let firstPath = '';
+    let firstGame = '';
+    this.currentBrowserGame = '';
+    let savedPaths = {};
+    try {
+      savedPaths = JSON.parse(localStorage.getItem('pzviewer.savedPaths') || '{}');
+    } catch (err) {
+      console.warn('Saved folder preferences could not be read:', err);
+    }
+    ['ff1', 'ff2', 'ff3'].forEach((game) => {
+      const path = savedPaths[game] ||
+        localStorage.getItem('pzviewer.' + game + 'Path') || '';
+      if (!firstPath && path) {
+        firstPath = path;
+        firstGame = game;
+      }
+    });
+    this.renderSavedRoots();
+    if (firstPath) {
+      const dirInput = document.getElementById('input-dir');
+      if (dirInput) dirInput.value = firstPath;
+      this.browseDir(firstPath, firstGame);
+    }
+  }
+
+  saveGamePath(game, path) {
+    if (game !== 'ff1' && game !== 'ff2' && game !== 'ff3') return;
+    const normalizedPath = (path || '').trim();
+    if (!normalizedPath) return;
+    try {
+      localStorage.setItem('pzviewer.' + game + 'Path', normalizedPath);
+      const savedPaths = {};
+      ['ff1', 'ff2', 'ff3'].forEach((key) => {
+        const value = localStorage.getItem('pzviewer.' + key + 'Path');
+        if (value) savedPaths[key] = value;
+      });
+      savedPaths[game] = normalizedPath;
+      localStorage.setItem('pzviewer.savedPaths', JSON.stringify(savedPaths));
+      fetch('/api/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ game: game, path: normalizedPath })
+      }).catch((err) => console.warn('Folder preference could not be saved:', err));
+    } catch (err) {
+      console.warn('Folder preference could not be saved:', err);
+    }
+  }
+
+  renderSavedRoots() {
     const fileListEl = document.getElementById('file-list');
     if (!fileListEl) return;
+    fileListEl.innerHTML = '';
+    ['ff1', 'ff2', 'ff3'].forEach((game) => {
+      const path = localStorage.getItem('pzviewer.' + game + 'Path') || '';
+      const title = game === 'ff1' ? 'Fatal Frame 1 Files' :
+        (game === 'ff2' ? 'Fatal Frame 2 Files' : 'Fatal Frame 3 Files');
+      const row = document.createElement('div');
+      row.className = 'file-item saved-root';
+      row.dataset.search = (title + ' ' + path).toLowerCase();
+      row.innerHTML = '<span class="file-icon">📁</span><span class="file-name">' +
+        title + '</span><span class="file-meta root-status">' +
+        (path ? 'checking…' : 'Not set') + '</span>';
+      row.addEventListener('click', () => {
+        if (path) this.browseDir(path, game);
+        else this.chooseSavedRoot(game);
+      });
+      const choose = document.createElement('button');
+      choose.className = 'btn btn-sm root-action';
+      choose.textContent = path ? 'Update' : 'Select';
+      choose.title = 'Set ' + title + ' folder';
+      choose.addEventListener('click', (event) => {
+        event.stopPropagation();
+        this.chooseSavedRoot(game);
+      });
+      row.appendChild(choose);
+      const clear = document.createElement('button');
+      clear.className = 'btn-icon root-clear';
+      clear.textContent = '✖';
+      clear.title = 'Clear saved ' + title + ' path';
+      clear.addEventListener('click', (event) => {
+        event.stopPropagation();
+        localStorage.removeItem('pzviewer.' + game + 'Path');
+        fetch('/api/preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ game: game, path: '' })
+        }).catch((err) => console.warn('Folder preference could not be cleared:', err));
+        try {
+          const savedPaths = JSON.parse(localStorage.getItem('pzviewer.savedPaths') || '{}');
+          delete savedPaths[game];
+          localStorage.setItem('pzviewer.savedPaths', JSON.stringify(savedPaths));
+        } catch (err) {
+          console.warn('Saved folder preferences could not be updated:', err);
+        }
+        this.renderSavedRoots();
+      });
+      row.appendChild(clear);
+      fileListEl.appendChild(row);
+      if (path) this.checkSavedRoot(row, path, game);
+    });
+  }
+
+  async checkSavedRoot(row, path, game) {
+    try {
+      const res = await fetch('/api/browse?dir=' + encodeURIComponent(path) +
+        '&game=' + encodeURIComponent(game));
+      const status = row.querySelector('.root-status');
+      if (status) status.textContent = res.ok ? 'Saved path' : 'Missing folder';
+    } catch (err) {
+      const status = row.querySelector('.root-status');
+      if (status) status.textContent = 'Unavailable';
+    }
+  }
+
+  async chooseSavedRoot(game) {
+    const path = localStorage.getItem('pzviewer.' + game + 'Path') || '';
+    try {
+      const res = await fetch('/api/choose_folder?game=' + game +
+        '&dir=' + encodeURIComponent(path));
+      const data = await res.json();
+      if (data.chosen) {
+        this.saveGamePath(game, data.chosen);
+        this.renderSavedRoots();
+        document.getElementById('input-dir').value = data.chosen;
+        this.browseDir(data.chosen, game);
+      }
+    } catch (err) {
+      this.showToast('Folder picker error: ' + err.message, 'error');
+    }
+  }
+
+  async browseDir(dirPath, game = 'all') {
+    const fileListEl = document.getElementById('file-list');
+    if (!fileListEl) return;
+    if (game === 'all' && this.currentBrowserGame) {
+      game = this.currentBrowserGame;
+    }
+    if (game === 'ff1' || game === 'ff2' || game === 'ff3') {
+      this.currentBrowserGame = game;
+    }
     fileListEl.innerHTML = '<div class="loading-hint">Reading directory...</div>';
 
     try {
-      const res = await fetch('/api/browse?dir=' + encodeURIComponent(dirPath));
+      const res = await fetch('/api/browse?dir=' + encodeURIComponent(dirPath) +
+        '&game=' + encodeURIComponent(game));
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Folder could not be opened');
       fileListEl.innerHTML = '';
+      this.renderSavedRoots();
 
       const inputDir = document.getElementById('input-dir');
       if (inputDir && data.current_dir) {
@@ -482,7 +623,7 @@ class PZViewerApp {
         upRow.style.color = '#38bdf8';
         upRow.innerHTML = '<span>📁</span> <span>.. (Parent Directory)</span>';
         upRow.addEventListener('click', () => {
-          this.browseDir(data.parent_dir);
+          this.browseDir(data.parent_dir, game);
         });
         fileListEl.appendChild(upRow);
       }
@@ -492,7 +633,7 @@ class PZViewerApp {
           const row = document.createElement('div');
           row.className = 'file-item ' + (item.is_dir ? 'dir' : 'file-' + item.type);
           row.dataset.search = (item.name + ' ' + item.type).toLowerCase();
-          const iconMap = { sgd_pack: '🧩', sgd: '📄', mdl: '🤖', anm: '🎬', bmd: '🎬', cld: '🛡️', tm2: '🖼️', png: '🖼️', pk2: '📦', pk4: '📦' };
+          const iconMap = { sgd_pack: '🧩', sgd: '📄', bmd: '🎬', cld: '🛡️', tm2: '🖼️', tim2: '🖼️', png: '🖼️', pk2: '📦', pk4: '📦' };
           const icon = item.is_dir ? '📁' : (iconMap[item.type] || '📄');
           const size = item.is_dir ? 'folder' : this.formatFileSize(item.size);
           row.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' +
@@ -500,7 +641,7 @@ class PZViewerApp {
 
           row.addEventListener('click', () => {
             if (item.is_dir) {
-              this.browseDir(item.path);
+              this.browseDir(item.path, game);
             } else {
               this.loadFile(item.path);
             }
@@ -511,7 +652,12 @@ class PZViewerApp {
         fileListEl.innerHTML = '<div class="loading-hint">No compatible 3D files found</div>';
       }
     } catch (e) {
-      fileListEl.innerHTML = '<div class="loading-hint" style="color: #ef4444;">Error: ' + e.message + '</div>';
+      this.renderSavedRoots();
+      const error = document.createElement('div');
+      error.className = 'loading-hint';
+      error.style.color = '#ef4444';
+      error.textContent = 'Error: ' + e.message;
+      fileListEl.appendChild(error);
     }
   }
 
@@ -554,8 +700,14 @@ class PZViewerApp {
   async loadFile(filePath) {
     const fn = filePath.split('/').pop();
     this.showLoading('Loading ' + fn + ' into GPU VRAM...');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 90000);
     try {
-      const res = await fetch('/api/load?path=' + encodeURIComponent(filePath));
+      const res = await fetch('/api/load?path=' + encodeURIComponent(filePath) +
+        '&_=' + Date.now(), {
+          cache: 'no-store',
+          signal: controller.signal
+        });
       const data = await res.json();
       if (data.error) {
         this.showToast('Error: ' + data.error, 'error');
@@ -586,8 +738,14 @@ class PZViewerApp {
       this.showToast('Loaded ' + data.filename + ' on GPU successfully!', 'success');
     } catch (err) {
       console.error(err);
-      this.showToast('Failed: ' + err.message, 'error');
+      this.showToast(
+        err.name === 'AbortError'
+          ? 'Loading timed out. The asset parser stopped before the viewer could respond.'
+          : 'Failed: ' + err.message,
+        'error'
+      );
     } finally {
+      clearTimeout(timeout);
       this.hideLoading();
     }
   }
@@ -632,6 +790,7 @@ class PZViewerApp {
 
   buildGPUScene(data) {
     const isRoomAsset = data.model_type === 'room' || data.type === 'room';
+    const textureFlipY = data.uvs_flipped ? false : true;
     while (this.modelGroup.children.length) {
       const obj = this.modelGroup.children[0];
       if (obj.geometry) obj.geometry.dispose();
@@ -649,21 +808,38 @@ class PZViewerApp {
     }
 
     this.textures = {};
-    if (data.textures) {
+    const textureUsers = {};
+    const applyLoadedTexture = (idx, loadedTex) => {
+      const users = textureUsers[idx];
+      if (!users) return;
+      users.forEach((object) => {
+        object.material.map = loadedTex;
+        object.material.needsUpdate = true;
+      });
+    };
+    const applyTexturesToModel = true;
+    if (applyTexturesToModel && data.textures) {
       const loader = new THREE.TextureLoader();
       data.textures.forEach((tex, idx) => {
         if (tex.data_uri) {
-          const threeTex = loader.load(tex.data_uri);
-          // Character UVs are normalized by the SGD parser. Rooms retain the
-          // existing image-side flip used by their room UV convention.
-          threeTex.flipY = true;
+          const threeTex = loader.load(tex.data_uri, (loadedTex) => {
+            loadedTex.colorSpace = THREE.SRGBColorSpace;
+            loadedTex.flipY = textureFlipY;
+            loadedTex.needsUpdate = true;
+            if (this.renderer && this.renderer.initTexture) {
+              this.renderer.initTexture(loadedTex);
+            }
+            applyLoadedTexture(idx, loadedTex);
+          });
+          threeTex.flipY = textureFlipY;
           threeTex.colorSpace = THREE.SRGBColorSpace;
           threeTex.wrapS = THREE.RepeatWrapping;
           threeTex.wrapT = THREE.RepeatWrapping;
           threeTex.magFilter = THREE.NearestFilter;
           threeTex.minFilter = THREE.LinearMipmapLinearFilter;
           threeTex.generateMipmaps = true;
-          this.renderer.initTexture(threeTex);
+          threeTex.userData = { hasAlpha: !!tex.has_alpha };
+          threeTex.needsUpdate = true;
           this.textures[idx] = threeTex;
         }
       });
@@ -671,66 +847,114 @@ class PZViewerApp {
 
     if (data.meshes) {
       data.meshes.forEach((meshData, mIdx) => {
-        const geom = new THREE.BufferGeometry();
+        try {
+          const positions = Array.isArray(meshData.positions) ? meshData.positions : [];
+          if (positions.length < 3 || positions.length % 3 !== 0 ||
+              positions.some(value => !Number.isFinite(value))) {
+            throw new Error('invalid position buffer');
+          }
+          const vertexCount = positions.length / 3;
+          const geom = new THREE.BufferGeometry();
 
-        const posAttr = new THREE.BufferAttribute(new Float32Array(meshData.positions), 3);
-        posAttr.setUsage(THREE.StaticDrawUsage);
-        geom.setAttribute('position', posAttr);
+          const posAttr = new THREE.BufferAttribute(new Float32Array(positions), 3);
+          posAttr.setUsage(THREE.StaticDrawUsage);
+          geom.setAttribute('position', posAttr);
 
-        if (meshData.normals && meshData.normals.length > 0) {
-          const normAttr = new THREE.BufferAttribute(new Float32Array(meshData.normals), 3);
-          normAttr.setUsage(THREE.StaticDrawUsage);
-          geom.setAttribute('normal', normAttr);
-        } else {
-          geom.computeVertexNormals();
+          const addAttribute = (name, values, itemSize) => {
+            if (!Array.isArray(values) || values.length !== vertexCount * itemSize ||
+                values.some(value => !Number.isFinite(value))) return false;
+            const attr = new THREE.BufferAttribute(new Float32Array(values), itemSize);
+            attr.setUsage(THREE.StaticDrawUsage);
+            geom.setAttribute(name, attr);
+            return true;
+          };
+
+          const hasNormals = addAttribute('normal', meshData.normals, 3);
+          if (!hasNormals) geom.computeVertexNormals();
+          addAttribute('uv', meshData.uvs, 2);
+          const hasColors = addAttribute('color', meshData.colors, 3);
+
+          const rawIndices = Array.isArray(meshData.indices) ? meshData.indices : [];
+          const validIndices = [];
+          for (let i = 0; i + 2 < rawIndices.length; i += 3) {
+            const a = rawIndices[i];
+            const b = rawIndices[i + 1];
+            const c = rawIndices[i + 2];
+            if ([a, b, c].every(index => Number.isInteger(index) && index >= 0 && index < vertexCount)) {
+              validIndices.push(a, b, c);
+            }
+          }
+          if (validIndices.length > 0) {
+            const maxIndex = Math.max(...validIndices);
+            const canUseUint32 = maxIndex > 65535 &&
+              (this.renderer.capabilities.isWebGL2 ||
+               !!this.renderer.extensions.get('OES_element_index_uint'));
+            if (maxIndex <= 65535 || canUseUint32) {
+              const IndexArray = maxIndex <= 65535 ? Uint16Array : Uint32Array;
+              const idxAttr = new THREE.BufferAttribute(new IndexArray(validIndices), 1);
+              idxAttr.setUsage(THREE.StaticDrawUsage);
+              geom.setIndex(idxAttr);
+            }
+          }
+
+          geom.computeBoundingSphere();
+          geom.computeBoundingBox();
+
+          const tex = this.textures[meshData.tex_id];
+          const isRoom = isRoomAsset;
+          const meshSide = isRoom ? THREE.FrontSide : THREE.DoubleSide;
+          // Room textures use the alpha channel as baked GS color data in
+          // some assets; only prop/character materials use it for cutouts.
+          const hasAlpha = !!(tex && tex.userData && tex.userData.hasAlpha);
+          const MaterialClass = isRoom && tex ? THREE.MeshBasicMaterial : THREE.MeshStandardMaterial;
+          const mat = new MaterialClass({
+            map: tex || null,
+            // Parsed FF1 room color buffers can be zero-filled; multiplying
+            // a recovered texture by them makes the whole room black.
+            vertexColors: !tex && hasColors,
+            side: meshSide,
+            transparent: false,
+            // Room GS textures can use alpha as baked data rather than a
+            // cutout mask; alpha testing them makes dark room overlays vanish.
+            alphaTest: !isRoom && hasAlpha ? 0.5 : 0,
+            depthWrite: true,
+            opacity: 1,
+            ...(MaterialClass === THREE.MeshStandardMaterial ? {
+              roughness: 0.82,
+              metalness: 0.08
+            } : {})
+          });
+
+          const threeMesh = new THREE.Mesh(geom, mat);
+          threeMesh.name = meshData.name || ('submesh_' + mIdx);
+          const textureIndex = Number.isInteger(meshData.tex_id) ? meshData.tex_id : -1;
+          threeMesh.userData = {
+            hasTexture: !!tex,
+            textureIndex: textureIndex,
+            hasColors: hasColors,
+            originalMat: mat,
+            boneIndex: meshData.bone_index || 0
+          };
+          if (textureIndex >= 0) {
+            if (!textureUsers[textureIndex]) textureUsers[textureIndex] = [];
+            textureUsers[textureIndex].push(threeMesh);
+            if (this.textures[textureIndex]) {
+              applyLoadedTexture(textureIndex, this.textures[textureIndex]);
+            }
+          }
+
+          this.modelGroup.add(threeMesh);
+        } catch (err) {
+          console.warn('Skipping malformed mesh ' + mIdx + ':', err);
         }
-
-        if (meshData.uvs && meshData.uvs.length > 0) {
-          const uvAttr = new THREE.BufferAttribute(new Float32Array(meshData.uvs), 2);
-          uvAttr.setUsage(THREE.StaticDrawUsage);
-          geom.setAttribute('uv', uvAttr);
-        }
-
-        const hasColors = meshData.colors && meshData.colors.length > 0;
-        if (hasColors) {
-          const colAttr = new THREE.BufferAttribute(new Float32Array(meshData.colors), 3);
-          colAttr.setUsage(THREE.StaticDrawUsage);
-          geom.setAttribute('color', colAttr);
-        }
-
-        if (meshData.indices && meshData.indices.length > 0) {
-          const idxAttr = new THREE.BufferAttribute(new Uint32Array(meshData.indices), 1);
-          idxAttr.setUsage(THREE.StaticDrawUsage);
-          geom.setIndex(idxAttr);
-        }
-
-        geom.computeBoundingSphere();
-        geom.computeBoundingBox();
-
-        const tex = this.textures[meshData.tex_id];
-        const isRoom = isRoomAsset;
-        const meshSide = isRoom ? THREE.FrontSide : THREE.DoubleSide;
-        const mat = new THREE.MeshStandardMaterial({
-          map: tex || null,
-          vertexColors: hasColors,
-          side: meshSide,
-          transparent: true,
-          alphaTest: 0.01,
-          roughness: 0.82,
-          metalness: 0.08
-        });
-
-        const threeMesh = new THREE.Mesh(geom, mat);
-        threeMesh.name = meshData.name || ('submesh_' + mIdx);
-        threeMesh.userData = {
-          hasTexture: !!tex,
-          hasColors: hasColors,
-          originalMat: mat,
-          boneIndex: meshData.bone_index || 0
-        };
-
-        this.modelGroup.add(threeMesh);
       });
+    }
+    if (this.modelGroup.children.length === 0 && data.meshes && data.meshes.length > 0) {
+      console.error('No valid meshes were added to modelGroup', {
+        received: data.meshes.length,
+        filename: data.filename || data.name || 'model'
+      });
+      this.showToast('No valid mesh geometry was found in this asset.', 'error');
     }
 
     if (data.bones && data.bones.length > 0) {
@@ -751,7 +975,13 @@ class PZViewerApp {
       }
     }
 
-    this.renderer.compile(this.scene, this.camera);
+    // Shader precompilation is an optimization; it must not prevent the
+    // camera fit or leave an otherwise valid scene blank on WebGL errors.
+    try {
+      this.renderer.compile(this.scene, this.camera);
+    } catch (err) {
+      console.warn('GPU shader precompilation failed; continuing with lazy compilation:', err);
+    }
     this.applyShadingMode();
   }
 
@@ -877,24 +1107,34 @@ class PZViewerApp {
 
         switch (this.shadingMode) {
           case 'textured':
-            child.material = new THREE.MeshStandardMaterial({
+            const TexturedMaterial = isRoom && ud.hasTexture
+              ? THREE.MeshBasicMaterial
+              : THREE.MeshStandardMaterial;
+            child.material = new TexturedMaterial({
               map: ud.hasTexture ? child.material.map || ud.originalMat.map : null,
-              vertexColors: false,
+              // Texture-less room meshes still carry their baked appearance in vertex colors.
+              vertexColors: !ud.hasTexture && ud.hasColors,
               side: isRoom ? THREE.FrontSide : THREE.DoubleSide,
-              transparent: true,
-              alphaTest: 0.01,
-              roughness: 0.82,
-              metalness: 0.08
+              transparent: false,
+              alphaTest: ud.hasTexture && child.material.map && child.material.map.userData?.hasAlpha ? 0.5 : 0,
+              depthWrite: true,
+              ...(TexturedMaterial === THREE.MeshStandardMaterial ? {
+                roughness: 0.82,
+                metalness: 0.08
+              } : {})
             });
             break;
 
           case 'textured_vertex':
             child.material = new THREE.MeshStandardMaterial({
               map: ud.hasTexture ? child.material.map || ud.originalMat.map : null,
+              // Three.js multiplies the sampled texture by COLOR_0 when both
+              // are enabled.  Keep this mode distinct from plain Textures.
               vertexColors: ud.hasColors,
               side: isRoom ? THREE.FrontSide : THREE.DoubleSide,
-              transparent: true,
-              alphaTest: 0.01,
+              transparent: false,
+              alphaTest: ud.hasTexture && child.material.map && child.material.map.userData?.hasAlpha ? 0.5 : 0,
+              depthWrite: true,
               roughness: 0.82,
               metalness: 0.08
             });
@@ -1087,7 +1327,10 @@ class PZViewerApp {
     if (box.isEmpty()) {
       box.setFromObject(this.collisionGroup);
     }
-    if (box.isEmpty()) return;
+    if (box.isEmpty() || !Number.isFinite(box.min.x) || !Number.isFinite(box.max.x)) {
+      console.warn('Unable to fit camera: model has no finite bounds');
+      return;
+    }
 
     const center = new THREE.Vector3();
     box.getCenter(center);
@@ -1095,10 +1338,17 @@ class PZViewerApp {
     box.getSize(size);
 
     const maxDim = Math.max(size.x, size.y, size.z);
+    if (!Number.isFinite(maxDim) || maxDim <= 0) {
+      console.warn('Unable to fit camera: model bounds have invalid dimensions');
+      return;
+    }
     const fov = this.camera.fov * (Math.PI / 180);
     let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.6;
     cameraZ = Math.max(cameraZ, 25);
 
+    this.camera.near = Math.max(maxDim / 100000, 0.01);
+    this.camera.far = Math.max(60000, maxDim * 20);
+    this.camera.updateProjectionMatrix();
     this.camera.position.set(center.x, center.y + maxDim * 0.35, center.z + cameraZ);
     this.controls.target.copy(center);
     this.camera.lookAt(center);

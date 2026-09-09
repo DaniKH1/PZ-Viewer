@@ -10,7 +10,7 @@ experimental must not be treated as a definitive format specification.
 - Integers are little-endian.
 - The files examined mainly come from:
   `3ddata/character/motion`.
-- The BMD format is different from the MOTN format used by earlier versions.
+- BMD is the supported Project Zero 3 animation container.
 
 ## Known header
 

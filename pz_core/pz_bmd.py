@@ -1,6 +1,5 @@
 """Structural parser for Project Zero 3 BMD motion files.
 
-The BMD format is not the MOTN format used by PZ1/older animation files.
 This module intentionally exposes the verified container structure first:
 header, hierarchy/channel tables, per-bone block references, and compressed
 224-byte records.  The record payload is bit-packed and is kept raw until its

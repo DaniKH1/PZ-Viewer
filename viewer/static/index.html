@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <link rel="icon" type="image/png" href="app-icon.png">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Project Zero / Fatal Frame 1 - 3D Viewer & Extractor</title>
+  <title>Project Zero 3 - 3D Viewer & Extractor</title>
   <link rel="stylesheet" href="style.css">
   <style>
     /* Fix: modal footer always visible — overrides cached CSS */
@@ -56,7 +56,6 @@
             <h3>🗂️ Asset Browser</h3>
             <div style="display: flex; gap: 4px;">
               <button id="btn-dir-up" class="btn btn-sm" title="Go up to parent directory">⬆ Up</button>
-              <button id="btn-choose-folder" class="btn btn-sm btn-primary" title="Open native folder picker">📁 Browse...</button>
               <button id="btn-browse-refresh" class="btn-icon" title="Refresh">🔄</button>
             </div>
           </div>
@@ -146,8 +145,8 @@
               <select id="select-clip"></select>
             </div>
             <div class="anim-extra-actions">
-              <button id="btn-load-anm" class="btn btn-sm">Load animation...</button>
-              <button id="btn-detach-anm" class="btn btn-sm btn-danger" title="Detach animation to see pure T-Pose">Detach</button>
+              <button id="btn-load-animation" class="btn btn-sm">Load BMD animation...</button>
+              <button id="btn-detach-animation" class="btn btn-sm btn-danger" title="Detach animation to see pure T-Pose">Detach</button>
             </div>
           </div>
           <div class="anim-control-row">
@@ -229,6 +228,6 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=ff2-folder-selection-1"></script>
 </body>
 </html>

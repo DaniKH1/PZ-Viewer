@@ -1,176 +1,133 @@
-# Project Zero / Fatal Frame 3D Viewer & Extractor
+# Project Zero 3 - 3D Viewer & Extractor (PZViewer)
 
-PZViewer is a standalone desktop application for inspecting, rendering, and
-exporting 3D assets from the *Fatal Frame / Project Zero* games. It uses
-`MikuPan` as a technical reference and renders through a GPU-accelerated
-Three.js viewport hosted in a native Edge WebView2 window.
+A standalone **Desktop GUI Application** for inspecting, rendering, and exporting Project Zero 3 assets, built using `MikuPan` as technical reference.
 
-The project is an active reverse-engineering effort. Some formats and
-animation systems are understood well enough for production use, while other
-parts remain experimental.
+---
 
-## Progress
+## Highlights & GPU Architecture
 
-- [ ] Fatal Frame 1 / Project Zero 1: **5%**
-- [ ] Fatal Frame 3 / Project Zero 3: **45%**
+- **Native Desktop GUI**:
+  - Runs in its own standalone native desktop window via Microsoft Edge WebView2 (`edgechromium`).
+  - No web browser tabs or address bar needed.
+  - Smooth native window controls (resizable, custom dark theme, HUD).
+- **GPU Hardware Accelerated Pipeline**:
+  - Direct3D 11/12 hardware acceleration via dedicated GPU (NVIDIA / AMD / Intel).
+  - Vertex data (positions, normals, UVs, vertex colors, indices) are uploaded directly into **GPU VBOs (Vertex Buffer Objects)** using `StaticDrawUsage` so they stay resident in GPU VRAM.
+  - Textures are loaded and uploaded directly into **GPU VRAM** with mipmapping (`renderer.initTexture`).
+  - Shaders are pre-compiled on GPU (`renderer.compile`) to eliminate render stutters.
+  - Real-time **GPU hardware indicator** in the top bar displaying the active GPU device.
 
-These percentages describe overall format discovery, decoding, rendering, and
-export coverage rather than completion of any single feature.
+---
 
-## Highlights
+## Asset Features
 
-- Native desktop GUI with no browser tabs or address bar.
-- Direct3D 11/12 hardware acceleration through Edge WebView2.
-- GPU-resident vertex buffers, textures, mipmaps, and precompiled shaders.
-- Real-time GPU device indicator in the application header.
-- Directory browser with direct loading of supported assets.
-- Mesh-layer visibility controls, shading modes, collision visualization, and
-  camera fitting.
-- Batch export through `pz_export_cli.py`.
+- **Room Geometry (`.pk4` / `.sgd`)**:
+  - Extracts full room geometry from Project Zero 3 PK4 archives and SGD resources.
+  - Preserves vertex colors and applies PS2 UV conventions.
+- **Items, Furniture & Doors (`.sgd`)**:
+  - Full support for VIF/SGD packets (0x10, 0x12, 0x32, 0x80, 0x82).
+- **Characters (`.pk4` / `.sgd`)**:
+  - Unpacks nested PK4/MPK sub-SGDs and TIM2/TM2 textures.
+  - Automatically decodes PS2 palettes with CSM1 unswizzling and alpha correction.
+  - Skeletal armature bones (`coordp` hierarchy).
+- **Animations (`.bmd`)**:
+  - Project Zero 3 BMD motion loading and playback.
+  - **T-Pose / Rest Pose Toggle**: Option to load models in pure T-Pose or play back all animation clips.
+  - Load animations separately or detach them at any time.
+- **Collision Data**:
+  - Room collision polygons (`msnXXmap.obj` hitcheck data).
+  - SGD ProcUnit 4 bounding box colliders.
+  - Character bone colliders (head, chest, waist spheres).
+- **Multi-Format Export**:
+  - **`.glb` / `.gltf`**: Blender-ready with standard `COLOR_0` vertex color attribute.
+  - **`.obj`**: Wavefront OBJ with RGB vertex color extensions (`v x y z r g b`).
+  - **`.dae`**: Collada 1.4 with color sources and skeleton nodes.
+  - **`.fbx`**: ASCII FBX with `LayerElementColor` and bone clusters.
 
-## Supported formats and features
+### SGD parser modules
 
-### Fatal Frame 1 / Project Zero 1
+SGD parsing is selected by the containing archive: PK4 payloads use
+`pz_core.pz_sgd_ff3`, while PK2 payloads use `pz_core.pz_sgd_ff1`. The older
+`pz_core.pz_sgd` and top-level `pz_sgd` imports remain compatibility facades.
 
-- **Rooms (`.pk2`)**: extracts room geometry from `near_sgd` and related
-  near/far/side streams. (Borked, nees rewrite)
-- **Items, furniture, and doors (`.sgd`)**: decodes VIF/SGD packets including
-  packet types `0x10`, `0x12`, `0x32`, `0x80`, and `0x82`.
-- **Characters (`.mdl`)**: unpacks MPK sub-SGD data and associated PK2 TIM2
-  textures.
-- **Animations (`.anm`)**: decodes MOTN rotation, translation, and scaling
-  tracks. (Borked)
-- **Collision**: reads room hit-check polygons, SGD ProcUnit 4 bounding boxes,
-  and character bone colliders. (Borked)
+---
 
-### Fatal Frame 3 / Project Zero 3
+## Asset folder selection and navigation
 
-- **SGD assets**: loads model meshes, materials, bones, and textures.
-- **PK4 assets**: unpacks PK4 model packages and resolves their embedded or
-  adjacent SGD data.
-- **PK2 assets**: supports room packages and their extracted model content.
-- **CLD assets**: loads collision files directly from the browser and displays
-  them as 3D models.
-- **BMD assets**: parses the known header, hierarchy, base pose, track
-  references, and record area while preserving experimental data for further
-  research.
-- **Room collision**: reads collision data from map files and extracted
-  `02_cld` directories when available.
+The viewer keeps one root folder for each game in `PZViewer_paths.json`, located
+next to the executable (or next to `pz_viewer.py` when running from source):
 
-## CLD direct loading and primitive geometry
+```json
+{
+  "ff1": "C:/Games/Fatal Frame/3ddata",
+  "ff2": "C:/Games/Fatal Frame 2/3ddata",
+  "ff3": "C:/Games/Project Zero 3/3ddata"
+}
+```
 
-`.cld` files can be selected directly in the directory browser. The viewer
-parses the compact collision records and creates separate meshes for each
-validated primitive record instead of merging unrelated records into one
-visual object.
+The file is updated only when a folder is explicitly selected with the folder
+picker. Browsing into a subfolder, refreshing the listing, entering a path
+manually, or going back with `..` does not replace the saved root. For FF1,
+FF2, and FF3, navigation is restricted to the saved root; the viewer will not
+allow access to parent folders above it, including through a manually entered
+path. Use the clear button beside a saved game folder to remove its entry.
 
-Supported CLD primitive generation includes:
+The asset browser has separate entries for Fatal Frame 1, Fatal Frame 2, and
+Fatal Frame 3. The FF2 entry accepts the PS2 container/resource extensions
+currently understood by the browser (`.pk2`, `.sgd`, `.tim2`, and `.tm2`).
 
-- axis-aligned boxes with visible wireframe bounds;
-- spheres and other supported collider primitives;
-- flat collision polygons;
-- extruded room polygons with floor, ceiling, and perimeter wall faces.
+It is recommended to select the game's `3ddata` folder as the root rather than
+one of its child folders. This matches the expected `room`, `character`,
+`object`, `furniture`, `accessory`, and related asset layout, and allows the
+viewer to resolve sibling SGD, texture, animation, and linked resource files
+correctly.
 
-The same collision meshes are used for viewport visualization and collision
-export. This makes it possible to inspect collision geometry independently of
-the source room or character model.
+---
 
-## Textures, UVs, and collision
+## Quick Start (Desktop GUI Application)
 
-- Decodes PS2 TIM2/TM2 palettes, including CSM1 unswizzling and alpha
-  correction.
-- Preserves pre-baked room vertex colors from `pVMCD->avColor` when available.
-- Reads and bakes matching `.lit` SGD lighting data.
-- Applies the required UV and degenerate-strip corrections for supported room
-  data.
-- Uses room-aware texture orientation and material settings.
-- Displays boxes, polygons, spheres, and extruded collision meshes with
-  dedicated collision materials.
-- Supports toggling collision visibility independently from model visibility.
-
-## Export
-
-The desktop UI and command-line tools support:
-
-- **`.glb` / `.gltf`**: Blender-ready glTF with standard `COLOR_0` vertex
-  colors.
-- **`.obj`**: Wavefront OBJ with RGB vertex-color extensions.
-- **`.dae`**: Collada 1.4 with color sources and skeleton nodes.
-- **`.fbx`**: ASCII FBX with `LayerElementColor` and bone clusters.
-- Collision exports using the same GLB, OBJ, DAE, and FBX pipeline.
-- Optional texture PNG export and configurable export destinations.
-
-## BMD reverse-engineering status
-
-The BMD parser is intentionally documented as provisional. Current knowledge
-includes:
-
-- `BMD\0` signature and little-endian values;
-- frame, record, and bone counts;
-- parent hierarchy table;
-- provisional channel and track-reference tables;
-- a fixed-size 224-byte record area in the examined samples;
-- preservation and lookup of referenced packet data;
-- extraction of the initial base pose when the expected block is present.
-
-The exact relationship between records, packets, bones, frames, interpolation,
-angle representation, and the 25-bone BMD hierarchy is not yet proven.
-Animation playback therefore remains disabled for unverified BMD transforms;
-the viewer keeps the model in its validated rest pose until the mapping is
-confirmed. See [docs/bmd-format.md](docs/bmd-format.md) for the detailed
-research notes.
-
-## Quick start
-
-### Launch the desktop application
-
-Double-click `run_viewer.bat`, or run:
-
+### 1. Launch the Desktop App
+Double-click `run_viewer.bat` or run:
 ```bash
 python pz_viewer.py
 ```
+This opens the standalone Native Desktop GUI window rendered directly on your GPU!
 
-To use the system browser instead of the native desktop window:
+*(Optional: if you ever want to launch in your system browser instead of the desktop window, run `python pz_viewer.py --browser`)*
 
-```bash
-python pz_viewer.py --browser
-```
+### 2. Viewport Controls
+- **Left Mouse**: Rotate camera (Orbit).
+- **Right Mouse**: Pan camera.
+- **Scroll Wheel**: Zoom in/out.
+- **F key**: Center / Fit camera to model.
+- **Space**: Play / Pause animation.
+- **T key**: Toggle T-Pose / Animated pose.
+- **Left / Right Arrow**: Step backward / forward 1 frame.
 
-### Viewport controls
+---
 
-- **Left mouse button**: orbit the camera.
-- **Right mouse button**: pan the camera.
-- **Mouse wheel**: zoom in or out.
-- **F**: fit and center the camera on the model.
-- **Space**: play or pause animation.
-- **T**: toggle T-pose or animated pose.
-- **Left / Right Arrow**: step one animation frame backward or forward.
+## Command-Line Export (Batch Processing)
 
-## Command-line export
-
-Assets can be exported without opening the GUI through `pz_export_cli.py`:
+You can export assets directly without opening the GUI using `pz_export_cli.py`:
 
 ```bash
-# Export a Fatal Frame 1 room with vertex colors to GLB
-python pz_export_cli.py "f:/Project Zero Modding/Obscura/bin/3ddata/room/r000_genkan.pk2" -o ./exported/r000.glb
+# Export room with vertex colors to GLB
+# Export a Project Zero 3 room/model PK4 to GLB
+python pz_export_cli.py "f:/Project Zero Modding/Obscura/bin/3ddata/room/r000_genkan.pk4" -o ./exported/r000.glb
 
-# Export a character in T-pose to GLB
-python pz_export_cli.py "f:/Project Zero Modding/Obscura/bin/3ddata/man/mdl/m000_miku.mdl" --tpose -o ./exported/miku_tpose.glb
+# Export a Project Zero 3 SGD to OBJ
+python pz_export_cli.py "f:/Project Zero Modding/Obscura/bin/3ddata/room/0000.sgd" -f obj -o ./exported/room.obj
 
-# Export a character with animation to Collada
-python pz_export_cli.py "f:/Project Zero Modding/Obscura/bin/3ddata/man/mdl/m000_miku.mdl" --anim "f:/Project Zero Modding/Obscura/bin/3ddata/man/anm/m000_miku.anm" -f dae -o ./exported/miku.dae
-
-# Export furniture or a door to OBJ
+# Export furniture or door to OBJ
 python pz_export_cli.py "f:/Project Zero Modding/Obscura/bin/3ddata/furniture/f000_clock_l.sgd" -f obj -o ./exported/clock.obj
 ```
 
-## Blender vertex-color guide
+---
 
-1. In Blender, choose **File > Import > glTF 2.0 (.glb/.gltf)** and select the
-   exported file.
-2. In the 3D Viewport, use **Material Preview** or **Rendered** shading. In
-   Solid mode, set the Shading **Color** option to **Attribute**.
-3. Under **Object Data Properties** (the green triangle), open **Color
-   Attributes** and select `COLOR_0`. In the Shader Editor, connect an
-   **Attribute** node set to `COLOR_0` to the Principled BSDF Base Color input.
+## Blender Import & Vertex Colors Guide
 
+1. In Blender, go to **File > Import > glTF 2.0 (.glb/.gltf)** and select the exported `.glb` file.
+2. In the 3D Viewport:
+   - Change Viewport Shading to **Material Preview** or **Rendered**.
+   - Or in Solid mode, click the Shading drop-down (top right of viewport) and set **Color** to **Attribute**.
+3. Under **Object Data Properties** (green triangle icon) > **Color Attributes**, you will see `COLOR_0`. In Shader Editor, add an **Attribute** node set to `COLOR_0` and connect `Color` to `Base Color` of your Principled BSDF shader.

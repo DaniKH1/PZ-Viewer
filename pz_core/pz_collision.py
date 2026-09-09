@@ -326,7 +326,7 @@ def parse_all_rooms_collision_from_map(map_data, wall_height=20.0, extrude_3d=Tr
 
 def collision_to_sgd_model(collision_meshes, name="collision"):
     """Converts a list of CollisionMesh objects into an SGDModel suitable for GLB/OBJ export."""
-    from pz_core.pz_sgd import SGDModel, SGDMesh, SGDMaterial
+    from pz_core.pz_sgd_ff1 import SGDModel, SGDMesh, SGDMaterial
 
     model = SGDModel(name)
     mat = SGDMaterial(0, "Collision_Material")
