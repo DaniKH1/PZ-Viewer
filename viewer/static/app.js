@@ -439,7 +439,21 @@ class PZViewerApp {
     });
   }
 
-  restoreGamePaths() {
+  async restoreGamePaths() {
+    try {
+      const response = await fetch('/api/preferences?_=' + Date.now(), { cache: 'no-store' });
+      if (response.ok) {
+        const savedPaths = await response.json();
+        ['ff1', 'ff3'].forEach((game) => {
+          if (savedPaths[game]) {
+            localStorage.setItem('pzviewer.' + game + 'Path', savedPaths[game]);
+          }
+        });
+        localStorage.setItem('pzviewer.savedPaths', JSON.stringify(savedPaths));
+      }
+    } catch (err) {
+      console.warn('Server folder preferences could not be read:', err);
+    }
     let firstPath = '';
     let firstGame = '';
     this.currentBrowserGame = '';
@@ -478,6 +492,11 @@ class PZViewerApp {
       });
       savedPaths[game] = normalizedPath;
       localStorage.setItem('pzviewer.savedPaths', JSON.stringify(savedPaths));
+      fetch('/api/preferences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ game: game, path: normalizedPath })
+      }).catch((err) => console.warn('Folder preference could not be saved:', err));
     } catch (err) {
       console.warn('Folder preference could not be saved:', err);
     }
@@ -516,6 +535,11 @@ class PZViewerApp {
       clear.addEventListener('click', (event) => {
         event.stopPropagation();
         localStorage.removeItem('pzviewer.' + game + 'Path');
+        fetch('/api/preferences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ game: game, path: '' })
+        }).catch((err) => console.warn('Folder preference could not be cleared:', err));
         try {
           const savedPaths = JSON.parse(localStorage.getItem('pzviewer.savedPaths') || '{}');
           delete savedPaths[game];

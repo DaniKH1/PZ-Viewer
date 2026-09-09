@@ -39,7 +39,40 @@ from pz_core.pz_export import export_glb, export_obj, export_dae, export_fbx, ex
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 EXPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "exports")
+APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(
+    sys.executable if getattr(sys, "frozen", False) else __file__
+)))
+PREFERENCES_FILE = os.path.join(APP_DIR, "PZViewer_paths.json")
 os.makedirs(EXPORTS_DIR, exist_ok=True)
+
+
+def load_folder_preferences():
+    try:
+        with open(PREFERENCES_FILE, "r", encoding="utf-8") as preferences:
+            data = json.load(preferences)
+        return {
+            key: str(value).replace("\\", "/")
+            for key, value in data.items()
+            if key in ("ff1", "ff3") and isinstance(value, str) and value.strip()
+        }
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def save_folder_preference(game, path):
+    if game not in ("ff1", "ff3"):
+        return load_folder_preferences()
+    paths = load_folder_preferences()
+    if path and path.strip():
+        paths[game] = path.strip().replace("\\", "/")
+    else:
+        paths.pop(game, None)
+    temporary = PREFERENCES_FILE + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as preferences:
+        json.dump(paths, preferences, indent=2)
+        preferences.write("\n")
+    os.replace(temporary, PREFERENCES_FILE)
+    return paths
 
 CURRENT_STATE = {
     "model": None,
@@ -1075,10 +1108,22 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
 
+        if parsed.path == '/api/preferences':
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(load_folder_preferences()).encode('utf-8'))
+            return
+
         if parsed.path == '/api/browse':
             qs = parse_qs(parsed.query)
             target_dir = qs.get('dir', [''])[0].strip()
             game = qs.get('game', ['all'])[0].lower()
+            if game in ("ff1", "ff3") and target_dir:
+                try:
+                    save_folder_preference(game, target_dir)
+                except OSError as exc:
+                    _LOAD_LOGGER.warning("Could not save folder preference: %s", exc)
             file_extensions = {
                 'ff1': ('.pk2', '.sgd', '.tim2'),
                 'ff3': ('.pk4', '.sgd', '.tm2'),
@@ -1170,6 +1215,11 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                 pass
 
             resp = {"status": "ok", "chosen": chosen.replace('\\', '/') if chosen else ""}
+            if resp["chosen"] and game in ("ff1", "ff3"):
+                try:
+                    save_folder_preference(game, resp["chosen"])
+                except OSError as exc:
+                    _LOAD_LOGGER.warning("Could not save folder preference: %s", exc)
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
@@ -1269,6 +1319,22 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         content_length = int(self.headers.get('Content-Length', 0))
         post_data = self.rfile.read(content_length)
+
+        if parsed.path == '/api/preferences':
+            req = json.loads(post_data.decode('utf-8')) if post_data else {}
+            game = req.get("game", "")
+            path = req.get("path", "")
+            try:
+                preferences = save_folder_preference(game, path)
+                status_code = 200
+            except (OSError, ValueError, TypeError) as exc:
+                preferences = {"error": str(exc)}
+                status_code = 500
+            self.send_response(status_code)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(preferences).encode('utf-8'))
+            return
 
         if parsed.path == '/api/load':
             req = json.loads(post_data.decode('utf-8')) if post_data else {}
