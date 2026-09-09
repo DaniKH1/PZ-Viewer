@@ -53,14 +53,14 @@ def load_folder_preferences():
         return {
             key: str(value).replace("\\", "/")
             for key, value in data.items()
-            if key in ("ff1", "ff3") and isinstance(value, str) and value.strip()
+            if key in ("ff1", "ff2", "ff3") and isinstance(value, str) and value.strip()
         }
     except (OSError, ValueError, TypeError):
         return {}
 
 
 def save_folder_preference(game, path):
-    if game not in ("ff1", "ff3"):
+    if game not in ("ff1", "ff2", "ff3"):
         return load_folder_preferences()
     paths = load_folder_preferences()
     if path and path.strip():
@@ -1133,7 +1133,7 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
             qs = parse_qs(parsed.query)
             target_dir = qs.get('dir', [''])[0].strip()
             game = qs.get('game', ['all'])[0].lower()
-            saved_root = load_folder_preferences().get(game) if game in ("ff1", "ff3") else ""
+            saved_root = load_folder_preferences().get(game) if game in ("ff1", "ff2", "ff3") else ""
             if saved_root and not folder_is_within_root(target_dir, saved_root):
                 self.send_response(403)
                 self.send_header('Content-Type', 'application/json')
@@ -1145,6 +1145,7 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                 return
             file_extensions = {
                 'ff1': ('.pk2', '.sgd', '.tim2'),
+                'ff2': ('.pk2', '.sgd', '.tim2', '.tm2'),
                 'ff3': ('.pk4', '.sgd', '.tm2'),
                 'all': ('.pk2', '.pk4', '.sgd', '.bmd', '.cld', '.obj', '.tm2', '.tim2', '.png'),
             }.get(game, ('.pk2', '.pk4', '.sgd', '.bmd', '.cld', '.obj', '.tm2', '.tim2', '.png'))
@@ -1223,6 +1224,7 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
             game = qs.get('game', ['all'])[0].lower()
             picker_titles = {
                 'ff1': 'Select Fatal Frame 1 Files',
+                'ff2': 'Select Fatal Frame 2 Files',
                 'ff3': 'Select Fatal Frame 3 Files',
             }
             chosen = ""
@@ -1241,7 +1243,7 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                 pass
 
             resp = {"status": "ok", "chosen": chosen.replace('\\', '/') if chosen else ""}
-            if resp["chosen"] and game in ("ff1", "ff3"):
+            if resp["chosen"] and game in ("ff1", "ff2", "ff3"):
                 try:
                     save_folder_preference(game, resp["chosen"])
                 except OSError as exc:

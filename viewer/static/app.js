@@ -444,7 +444,7 @@ class PZViewerApp {
       const response = await fetch('/api/preferences?_=' + Date.now(), { cache: 'no-store' });
       if (response.ok) {
         const savedPaths = await response.json();
-        ['ff1', 'ff3'].forEach((game) => {
+        ['ff1', 'ff2', 'ff3'].forEach((game) => {
           if (savedPaths[game]) {
             localStorage.setItem('pzviewer.' + game + 'Path', savedPaths[game]);
           }
@@ -463,7 +463,7 @@ class PZViewerApp {
     } catch (err) {
       console.warn('Saved folder preferences could not be read:', err);
     }
-    ['ff1', 'ff3'].forEach((game) => {
+    ['ff1', 'ff2', 'ff3'].forEach((game) => {
       const path = savedPaths[game] ||
         localStorage.getItem('pzviewer.' + game + 'Path') || '';
       if (!firstPath && path) {
@@ -480,13 +480,13 @@ class PZViewerApp {
   }
 
   saveGamePath(game, path) {
-    if (game !== 'ff1' && game !== 'ff3') return;
+    if (game !== 'ff1' && game !== 'ff2' && game !== 'ff3') return;
     const normalizedPath = (path || '').trim();
     if (!normalizedPath) return;
     try {
       localStorage.setItem('pzviewer.' + game + 'Path', normalizedPath);
       const savedPaths = {};
-      ['ff1', 'ff3'].forEach((key) => {
+      ['ff1', 'ff2', 'ff3'].forEach((key) => {
         const value = localStorage.getItem('pzviewer.' + key + 'Path');
         if (value) savedPaths[key] = value;
       });
@@ -506,9 +506,10 @@ class PZViewerApp {
     const fileListEl = document.getElementById('file-list');
     if (!fileListEl) return;
     fileListEl.innerHTML = '';
-    ['ff1', 'ff3'].forEach((game) => {
+    ['ff1', 'ff2', 'ff3'].forEach((game) => {
       const path = localStorage.getItem('pzviewer.' + game + 'Path') || '';
-      const title = game === 'ff1' ? 'Fatal Frame 1 Files' : 'Fatal Frame 3 Files';
+      const title = game === 'ff1' ? 'Fatal Frame 1 Files' :
+        (game === 'ff2' ? 'Fatal Frame 2 Files' : 'Fatal Frame 3 Files');
       const row = document.createElement('div');
       row.className = 'file-item saved-root';
       row.dataset.search = (title + ' ' + path).toLowerCase();
@@ -590,7 +591,7 @@ class PZViewerApp {
     if (game === 'all' && this.currentBrowserGame) {
       game = this.currentBrowserGame;
     }
-    if (game === 'ff1' || game === 'ff3') {
+    if (game === 'ff1' || game === 'ff2' || game === 'ff3') {
       this.currentBrowserGame = game;
     }
     fileListEl.innerHTML = '<div class="loading-hint">Reading directory...</div>';
