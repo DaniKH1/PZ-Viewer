@@ -592,10 +592,6 @@ class PZViewerApp {
     }
     if (game === 'ff1' || game === 'ff3') {
       this.currentBrowserGame = game;
-      const normalizedPath = (dirPath || '').trim();
-      if (normalizedPath) {
-        this.saveGamePath(game, normalizedPath);
-      }
     }
     fileListEl.innerHTML = '<div class="loading-hint">Reading directory...</div>';
 

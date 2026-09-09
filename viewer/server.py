@@ -1124,11 +1124,6 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
             qs = parse_qs(parsed.query)
             target_dir = qs.get('dir', [''])[0].strip()
             game = qs.get('game', ['all'])[0].lower()
-            if game in ("ff1", "ff3") and target_dir:
-                try:
-                    save_folder_preference(game, target_dir)
-                except OSError as exc:
-                    _LOAD_LOGGER.warning("Could not save folder preference: %s", exc)
             file_extensions = {
                 'ff1': ('.pk2', '.sgd', '.tim2'),
                 'ff3': ('.pk4', '.sgd', '.tm2'),
