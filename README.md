@@ -52,6 +52,33 @@ SGD parsing is selected by the containing archive: PK4 payloads use
 
 ---
 
+## Asset folder selection and navigation
+
+The viewer keeps one root folder for each game in `PZViewer_paths.json`, located
+next to the executable (or next to `pz_viewer.py` when running from source):
+
+```json
+{
+  "ff1": "C:/Games/Fatal Frame/3ddata",
+  "ff3": "C:/Games/Project Zero 3/3ddata"
+}
+```
+
+The file is updated only when a folder is explicitly selected with the folder
+picker. Browsing into a subfolder, refreshing the listing, entering a path
+manually, or going back with `..` does not replace the saved root. For FF1 and
+FF3, navigation is restricted to the saved root; the viewer will not allow
+access to parent folders above it, including through a manually entered path.
+Use the clear button beside a saved game folder to remove its entry.
+
+It is recommended to select the game's `3ddata` folder as the root rather than
+one of its child folders. This matches the expected `room`, `character`,
+`object`, `furniture`, `accessory`, and related asset layout, and allows the
+viewer to resolve sibling SGD, texture, animation, and linked resource files
+correctly.
+
+---
+
 ## Quick Start (Desktop GUI Application)
 
 ### 1. Launch the Desktop App
