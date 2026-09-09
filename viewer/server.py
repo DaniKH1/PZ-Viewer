@@ -382,6 +382,10 @@ def apply_named_foliage_uv_corrections(model):
         is_foliage = (
             mesh_name in target_names
             or re.fullmatch(r"mesh_b(?:111|112)_t0x12", mesh_name) is not None
+            or (
+                getattr(mesh, "bone_index", -1) in (111, 112)
+                and "_t0x12" in mesh_name
+            )
         )
         if is_foliage and not getattr(mesh, "_named_uv_flip_applied", False):
             mesh.uvs = [[u, 1.0 - v] for u, v in mesh.uvs]
