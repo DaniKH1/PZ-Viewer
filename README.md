@@ -21,20 +21,20 @@ A standalone **Desktop GUI Application** for inspecting, rendering, and exportin
 
 ## Asset Features
 
-- **Room Geometry (`.pk4` / `.sgd`)**:
-  - Extracts full room geometry from Project Zero 3 PK4 archives and SGD resources.
+- **Room Geometry (`.pk4` / `.pk2` / `.sgd`)**:
+  - Extracts full room geometry from Project Zero files and SGD resources.
   - Preserves vertex colors and applies PS2 UV conventions.
 - **Items, Furniture & Doors (`.sgd`)**:
   - Full support for VIF/SGD packets (0x10, 0x12, 0x32, 0x80, 0x82).
-- **Characters (`.pk4` / `.sgd`)**:
-  - Unpacks nested PK4/MPK sub-SGDs and TIM2/TM2 textures.
+- **Characters (`.pk4` / `.mdl` / `.sgd`)**:
+  - Unpacks nested PK4/PK2 sub-SGDs and TIM2/TM2 textures.
   - Automatically decodes PS2 palettes with CSM1 unswizzling and alpha correction.
   - Skeletal armature bones (`coordp` hierarchy).
-- **Animations (`.bmd`)**:
+- **BORKED | Animations (`.bmd`)**:
   - Project Zero 3 BMD motion loading and playback.
   - **T-Pose / Rest Pose Toggle**: Option to load models in pure T-Pose or play back all animation clips.
   - Load animations separately or detach them at any time.
-- **Collision Data**:
+- **BORKED | Collision Data**:
   - Room collision polygons (`msnXXmap.obj` hitcheck data).
   - SGD ProcUnit 4 bounding box colliders.
   - Character bone colliders (head, chest, waist spheres).
@@ -61,7 +61,7 @@ next to the executable (or next to `pz_viewer.py` when running from source):
 {
   "ff1": "C:/Games/Fatal Frame/3ddata",
   "ff2": "C:/Games/Fatal Frame 2/3ddata",
-  "ff3": "C:/Games/Project Zero 3/3ddata"
+  "ff3": "C:/Games/Fatal Frame 3/3ddata"
 }
 ```
 
