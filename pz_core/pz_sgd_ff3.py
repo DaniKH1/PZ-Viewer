@@ -40,6 +40,10 @@ class SGDMaterial:
 class SGDModel:
     def __init__(self, name="model"):
         self.name = name
+        # FF3 SGD UVs use the opposite vertical origin from the PNG/TIM2
+        # images uploaded by the viewer.  Keep this explicit so direct SGD
+        # loads use the same texture orientation as PK4-contained SGDs.
+        self.uvs_are_flipped = True
         self.materials = []
         self.bones = []
         self.meshes = []
