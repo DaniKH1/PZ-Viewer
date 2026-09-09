@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" type="image/png" href="app-icon.png">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Project Zero 3 - 3D Viewer & Extractor</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* Fix: modal footer always visible — overrides cached CSS */
+    .modal-content {
+      max-height: 90vh !important;
+      display: flex !important;
+      flex-direction: column !important;
+      overflow: hidden !important;
+    }
+    .modal-header { flex-shrink: 0 !important; }
+    .modal-body   { flex: 1 1 auto !important; overflow-y: auto !important; }
+    .modal-footer { flex-shrink: 0 !important; }
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <div class="logo">
+          <img class="icon app-logo" src="app-icon.png" alt="PZViewer">
+          <h1>Project Zero / Fatal Frame 3D Viewer</h1>
+          <span class="badge">MikuPan Engine</span>
+        </div>
+        <div class="topbar-divider"></div>
+        <div id="gpu-badge" class="gpu-badge" title="Hardware GPU Rendering Active">
+          <span class="gpu-dot"></span>
+          <span id="gpu-name">GPU: Detecting...</span>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button id="btn-export-collision" class="btn btn-secondary" title="Export 3D Collision Geometry (.glb / .obj)">
+          🛡️ Export Collision...
+        </button>
+        <button id="btn-export-modal" class="btn btn-primary" title="Export Model to glTF, OBJ, DAE, FBX">
+          💾 Export 3D Model...
+        </button>
+      </div>
+    </header>
+
+    <div class="main-content">
+      <!-- Left Sidebar -->
+      <aside class="sidebar">
+        <!-- File Browser -->
+        <section class="panel-section">
+          <div class="section-header">
+            <h3>🗂️ Asset Browser</h3>
+            <div style="display: flex; gap: 4px;">
+              <button id="btn-dir-up" class="btn btn-sm" title="Go up to parent directory">⬆ Up</button>
+              <button id="btn-browse-refresh" class="btn-icon" title="Refresh">🔄</button>
+            </div>
+          </div>
+          <div class="dir-nav">
+            <input type="text" id="input-dir" value="" placeholder="Choose a folder or enter a path...">
+            <button id="btn-dir-go" class="btn btn-sm">Go</button>
+          </div>
+          <input type="search" id="file-filter" class="file-filter" placeholder="Filter files and folders...">
+          <div id="browser-location" class="browser-location"></div>
+          <div id="file-list" class="file-list">
+            <div class="loading-hint">Choose a folder to browse assets.</div>
+          </div>
+        </section>
+
+        <!-- Inspector Stats -->
+        <section class="panel-section">
+          <h3>📊 Model Info & VRAM</h3>
+          <div id="model-stats" class="stats-table">
+            <div class="stat-row"><span class="label">File:</span><span id="stat-name" class="val">None</span></div>
+            <div class="stat-row"><span class="label">Type:</span><span id="stat-type" class="val">-</span></div>
+            <div class="stat-row"><span class="label">Vertices:</span><span id="stat-verts" class="val">0</span></div>
+            <div class="stat-row"><span class="label">Triangles:</span><span id="stat-tris" class="val">0</span></div>
+            <div class="stat-row"><span class="label">Submeshes:</span><span id="stat-submeshes" class="val">0</span></div>
+            <div class="stat-row"><span class="label">Bones:</span><span id="stat-bones" class="val">0</span></div>
+            <div class="stat-row"><span class="label">Textures:</span><span id="stat-textures" class="val">0</span></div>
+            <div class="stat-row"><span class="label">GPU Pipeline:</span><span class="val" style="color: #10b981;">Direct3D / VBO</span></div>
+          </div>
+          <div id="texture-preview-box" class="texture-preview-box">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <div class="texture-preview-title" style="margin: 0;">Texture VRAM Slots</div>
+              <button id="btn-extract-textures" class="btn btn-sm" style="padding: 2px 7px; font-size: 11px; background: #0284c7; color: white;" title="Extract all model textures as PNG (.zip)">📥 Extract PNGs</button>
+            </div>
+            <div id="texture-grid" class="texture-grid"></div>
+          </div>
+        </section>
+      </aside>
+
+      <!-- Center 3D Viewport -->
+      <main class="viewport-container">
+        <div id="viewport"></div>
+
+        <!-- Floating Viewport Controls -->
+        <div class="viewport-controls">
+          <div class="control-group">
+            <label>Shading:</label>
+            <select id="select-shading">
+              <option value="textured" selected>Textures</option>
+              <option value="textured_vertex">Textures + Vertex Color</option>
+              <option value="vcolors">Vertex Colors (Rooms)</option>
+              <option value="wireframe">Wireframe</option>
+              <option value="solid">Solid White</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label><input type="checkbox" id="chk-bones"> Bones</label>
+          </div>
+          <div class="control-group">
+            <label><input type="checkbox" id="chk-collision"> Collision</label>
+          </div>
+          <button id="btn-mesh-layers" class="btn btn-sm">Layers</button>
+          <button id="btn-reset-cam" class="btn btn-sm" title="Center view">🎯 Reset Cam (F)</button>
+        </div>
+
+        <div id="layers-modal" class="layers-modal hidden">
+          <div class="layers-modal-content">
+            <div class="layers-modal-header">
+              <b>Mesh Layers</b>
+              <button id="btn-close-layers" class="btn-icon">✖</button>
+            </div>
+            <div class="layers-actions">
+              <button id="btn-layers-all" class="btn btn-sm">Activate all</button>
+              <button id="btn-layers-none" class="btn btn-sm">Deactivate all</button>
+            </div>
+            <div id="mesh-layers"><span class="muted">Load an asset to view its meshes.</span></div>
+          </div>
+        </div>
+
+        <!-- Animation Timeline Panel -->
+        <div id="anim-panel" class="anim-panel hidden">
+          <div class="anim-top-row">
+            <div class="anim-mode-toggles">
+              <button id="btn-t-pose" class="btn btn-toggle active">🧍 T-Pose (Rest Pose)</button>
+              <button id="btn-animated" class="btn btn-toggle">🎬 Animated</button>
+            </div>
+            <div class="clip-selector">
+              <label>Clip:</label>
+              <select id="select-clip"></select>
+            </div>
+            <div class="anim-extra-actions">
+              <button id="btn-load-animation" class="btn btn-sm">Load BMD animation...</button>
+              <button id="btn-detach-animation" class="btn btn-sm btn-danger" title="Detach animation to see pure T-Pose">Detach</button>
+            </div>
+          </div>
+          <div class="anim-control-row">
+            <button id="btn-play-pause" class="btn btn-icon-lg">▶️</button>
+            <input type="range" id="timeline-slider" min="0" max="100" value="0" step="1">
+            <span id="frame-counter" class="frame-label">Frame: 0 / 0</span>
+            <div class="speed-control">
+              <label>Speed:</label>
+              <select id="select-speed">
+                <option value="0.25">0.25x</option>
+                <option value="0.5">0.5x</option>
+                <option value="1.0" selected>1.0x</option>
+                <option value="2.0">2.0x</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Export Modal -->
+    <div id="export-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="export-modal-title">Export 3D Asset</h2>
+          <button id="btn-modal-close" class="btn-icon">✖</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>What to Export:</label>
+            <div class="radio-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 12px;">
+              <label><input type="radio" name="export-target" value="model" checked> <b>🎨 3D Model & Textures</b></label>
+              <label><input type="radio" name="export-target" value="collision"> <b>🛡️ 3D Collision Geometry</b></label>
+            </div>
+          </div>
+          <div class="form-group">
+              <label><input type="radio" name="export-fmt" value="glb" checked> <b>glTF 2.0 (.glb)</b> <span class="fmt-hint">(Recommended for Blender / Engines)</span></label>
+              <label id="lbl-fmt-obj"><input type="radio" name="export-fmt" value="obj"> <b>Wavefront OBJ (.obj)</b></label>
+              <label id="lbl-fmt-dae"><input type="radio" name="export-fmt" value="dae"> <b>COLLADA (.dae)</b> <span class="fmt-hint">(Skins & rigs)</span></label>
+              <label id="lbl-fmt-fbx"><input type="radio" name="export-fmt" value="fbx"> <b>Autodesk FBX (.fbx)</b> <span class="fmt-hint">(Maya / Max / Unity)</span></label>
+            </div>
+          <div id="model-options-box" class="form-group options-box">
+            <h4>Model Options:</h4>
+            <label id="lbl-exp-vcolors"><input type="checkbox" id="exp-vcolors" checked> <b>Preserve Vertex Colors</b> <span class="opt-desc">(Rooms only)</span></label>
+            <label><input type="checkbox" id="exp-tpose" checked> <b>Export in T-Pose</b> <span class="opt-desc">(Export clean character bind pose)</span></label>
+            <label><input type="checkbox" id="exp-textures" checked> <b>Include & Extract Textures (PNG)</b> <span class="opt-desc">(Saved to exports/[name]_textures/)</span></label>
+          </div>
+          <div id="collision-options-box" class="form-group options-box hidden">
+            <h4>Collision Options:</h4>
+            <p class="opt-desc" style="margin-bottom: 8px;">
+              Converts 2D boundary half-planes into <b>3D volumetric collision solids</b> (floor, ceiling, and perimeter walls) with calculated outward normals and vertex colors.
+            </p>
+            <label><input type="checkbox" id="exp-col-vcolors" checked> <b>Include Collision Vertex Colors</b></label>
+          </div>
+          <div class="form-group">
+            <label>Save to Destination:</label>
+            <div class="export-destination-row">
+              <div id="export-destination" class="export-destination">PZViewer/Exports/[asset-name]/</div>
+              <button id="btn-choose-export-folder" type="button" class="btn btn-secondary">Choose Folder</button>
+            </div>
+          </div>
+          <div id="export-status" class="export-status"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-modal-cancel" class="btn btn-secondary">Cancel</button>
+          <button id="btn-modal-do-export" class="btn btn-primary">Export</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast"></div>
+
+    <!-- Loading Spinner -->
+    <div id="loading-overlay" class="spinner-overlay">
+      <div class="spinner"></div>
+      <div id="loading-text" class="spinner-text">Loading Model into GPU...</div>
+    </div>
+  </div>
+
+  <script src="app.js?v=ff1-gs-fix-3"></script>
+</body>
+</html>
