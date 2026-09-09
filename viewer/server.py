@@ -854,6 +854,11 @@ def handle_load_file(file_path):
                 or is_fly_path
             )
         )
+        # PK4 FF3 textures use the PS2 bottom-left image origin.  Room PK4s
+        # intentionally keep their parsed vertex UVs unchanged, so the
+        # renderer must invert the uploaded texture rather than the UVs.
+        if model:
+            model.uvs_are_flipped = True
         progress.log(
             "pk4_extraction",
             f"status=complete meshes={len(getattr(model, 'meshes', [])) if model else 0}"
