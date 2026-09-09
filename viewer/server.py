@@ -345,6 +345,9 @@ def serialize_model(model, textures=None, animations=None, collision_meshes=None
     if hasattr(model, "texture_debug"):
         diagnostics["texture_debug"] = model.texture_debug
     diagnostics["foliage_meshes"] = foliage_diagnostics
+    diagnostics["foliage_uv_corrections"] = getattr(
+        model, "foliage_uv_corrections", []
+    )
 
     return {
         "filename": getattr(model, 'export_name', getattr(model, 'name', 'model')),
@@ -373,10 +376,18 @@ def serialize_model(model, textures=None, animations=None, collision_meshes=None
 def apply_named_foliage_uv_corrections(model):
     """Apply the narrow PS2 foliage correction after every parse/merge path."""
     target_names = frozenset({"mesh_b111_t0x12", "mesh_b112_t0x12"})
+    corrected = []
     for mesh in getattr(model, "meshes", []):
-        if mesh.name in target_names and not getattr(mesh, "_named_uv_flip_applied", False):
+        mesh_name = str(getattr(mesh, "name", "")).lower()
+        is_foliage = (
+            mesh_name in target_names
+            or re.fullmatch(r"mesh_b(?:111|112)_t0x12", mesh_name) is not None
+        )
+        if is_foliage and not getattr(mesh, "_named_uv_flip_applied", False):
             mesh.uvs = [[u, 1.0 - v] for u, v in mesh.uvs]
             mesh._named_uv_flip_applied = True
+            corrected.append(mesh.name)
+    model.foliage_uv_corrections = corrected
     return model
 
 def find_textures_for_model(file_path, model, progress=None):
