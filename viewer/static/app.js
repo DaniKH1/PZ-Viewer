@@ -340,7 +340,11 @@ class PZViewerApp {
         }
         this.showLoading('Extracting and converting textures to PNG...');
         try {
-          const res = await fetch('/api/export_textures');
+          const res = await fetch('/api/export_textures', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ textures: this.currentModelData.textures })
+          });
           if (!res.ok) {
             const err = await res.json();
             throw new Error(err.error || 'Extraction failed');

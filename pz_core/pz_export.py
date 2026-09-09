@@ -3,7 +3,9 @@ import json
 import struct
 import math
 import copy
+import base64
 from io import BytesIO
+from PIL import Image
 
 
 def _normalized_normal(normal):
@@ -79,14 +81,40 @@ def _merge_meshes_by_texture(model):
         target.indices.extend([[a + offset, b + offset, c + offset] for a, b, c in mesh.indices])
     return list(groups.values())
 
+def _texture_image(texture, index):
+    """Return a detached PIL image from a decoded image or serialized data URI."""
+    if isinstance(texture, Image.Image):
+        return texture
+    if not isinstance(texture, dict):
+        raise ValueError(f"Texture {index} has no decoded image data")
+
+    data_uri = texture.get("data_uri")
+    if not isinstance(data_uri, str) or not data_uri.strip():
+        raise ValueError(f"Texture {index} has missing or empty data_uri")
+    try:
+        header, encoded = data_uri.split(",", 1)
+        if ";base64" not in header.lower():
+            raise ValueError("data_uri is not base64 encoded")
+        image = Image.open(BytesIO(base64.b64decode(encoded, validate=True)))
+        image.load()
+        return image
+    except (ValueError, OSError) as exc:
+        raise ValueError(f"Texture {index} has invalid data_uri: {exc}") from exc
+
+
 def export_textures_png(model, textures, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     saved_files = []
+    if textures is None:
+        raise ValueError("No texture data was provided")
+    if not isinstance(textures, (list, tuple)):
+        raise ValueError("Texture data must be a list")
     if not textures:
         return saved_files
 
     base_name = getattr(model, 'name', 'model')
-    for idx, img in enumerate(textures):
+    for idx, texture in enumerate(textures):
+        img = _texture_image(texture, idx)
         mat_names = [m.name for m in getattr(model, 'materials', []) if getattr(m, 'texture_index', -1) == idx]
         if mat_names:
             clean_name = os.path.splitext(mat_names[0])[0].replace(' ', '_')
