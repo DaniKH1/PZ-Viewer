@@ -74,6 +74,17 @@ def save_folder_preference(game, path):
     os.replace(temporary, PREFERENCES_FILE)
     return paths
 
+
+def folder_is_within_root(path, root):
+    """Return whether path is root itself or a descendant of root."""
+    try:
+        return os.path.commonpath([
+            os.path.abspath(path),
+            os.path.abspath(root),
+        ]) == os.path.abspath(root)
+    except ValueError:
+        return False
+
 CURRENT_STATE = {
     "model": None,
     "textures": [],
@@ -1111,6 +1122,16 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
             qs = parse_qs(parsed.query)
             target_dir = qs.get('dir', [''])[0].strip()
             game = qs.get('game', ['all'])[0].lower()
+            saved_root = load_folder_preferences().get(game) if game in ("ff1", "ff3") else ""
+            if saved_root and not folder_is_within_root(target_dir, saved_root):
+                self.send_response(403)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "error": "Navigation outside the selected root folder is not allowed",
+                    "root": saved_root.replace("\\", "/")
+                }).encode('utf-8'))
+                return
             file_extensions = {
                 'ff1': ('.pk2', '.sgd', '.tim2'),
                 'ff3': ('.pk4', '.sgd', '.tm2'),
@@ -1129,7 +1150,14 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({"error": "Folder not found"}).encode('utf-8'))
                 return
             
-            parent_dir = os.path.dirname(os.path.abspath(target_dir)).replace('\\', '/')
+            absolute_target = os.path.abspath(target_dir)
+            parent_dir = os.path.dirname(absolute_target)
+            if saved_root and os.path.normcase(absolute_target) != os.path.normcase(
+                os.path.abspath(saved_root)
+            ):
+                if not folder_is_within_root(parent_dir, saved_root):
+                    parent_dir = os.path.abspath(saved_root)
+            parent_dir = parent_dir.replace('\\', '/')
             items = []
             try:
                 all_entries = sorted(os.listdir(target_dir))
