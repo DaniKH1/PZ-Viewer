@@ -443,8 +443,15 @@ class PZViewerApp {
     let firstPath = '';
     let firstGame = '';
     this.currentBrowserGame = '';
+    let savedPaths = {};
+    try {
+      savedPaths = JSON.parse(localStorage.getItem('pzviewer.savedPaths') || '{}');
+    } catch (err) {
+      console.warn('Saved folder preferences could not be read:', err);
+    }
     ['ff1', 'ff3'].forEach((game) => {
-      const path = localStorage.getItem('pzviewer.' + game + 'Path') || '';
+      const path = savedPaths[game] ||
+        localStorage.getItem('pzviewer.' + game + 'Path') || '';
       if (!firstPath && path) {
         firstPath = path;
         firstGame = game;
@@ -455,6 +462,24 @@ class PZViewerApp {
       const dirInput = document.getElementById('input-dir');
       if (dirInput) dirInput.value = firstPath;
       this.browseDir(firstPath, firstGame);
+    }
+  }
+
+  saveGamePath(game, path) {
+    if (game !== 'ff1' && game !== 'ff3') return;
+    const normalizedPath = (path || '').trim();
+    if (!normalizedPath) return;
+    try {
+      localStorage.setItem('pzviewer.' + game + 'Path', normalizedPath);
+      const savedPaths = {};
+      ['ff1', 'ff3'].forEach((key) => {
+        const value = localStorage.getItem('pzviewer.' + key + 'Path');
+        if (value) savedPaths[key] = value;
+      });
+      savedPaths[game] = normalizedPath;
+      localStorage.setItem('pzviewer.savedPaths', JSON.stringify(savedPaths));
+    } catch (err) {
+      console.warn('Folder preference could not be saved:', err);
     }
   }
 
@@ -491,6 +516,13 @@ class PZViewerApp {
       clear.addEventListener('click', (event) => {
         event.stopPropagation();
         localStorage.removeItem('pzviewer.' + game + 'Path');
+        try {
+          const savedPaths = JSON.parse(localStorage.getItem('pzviewer.savedPaths') || '{}');
+          delete savedPaths[game];
+          localStorage.setItem('pzviewer.savedPaths', JSON.stringify(savedPaths));
+        } catch (err) {
+          console.warn('Saved folder preferences could not be updated:', err);
+        }
         this.renderSavedRoots();
       });
       row.appendChild(clear);
@@ -518,7 +550,7 @@ class PZViewerApp {
         '&dir=' + encodeURIComponent(path));
       const data = await res.json();
       if (data.chosen) {
-        localStorage.setItem('pzviewer.' + game + 'Path', data.chosen);
+        this.saveGamePath(game, data.chosen);
         this.renderSavedRoots();
         document.getElementById('input-dir').value = data.chosen;
         this.browseDir(data.chosen, game);
@@ -538,7 +570,7 @@ class PZViewerApp {
       this.currentBrowserGame = game;
       const normalizedPath = (dirPath || '').trim();
       if (normalizedPath) {
-        localStorage.setItem('pzviewer.' + game + 'Path', normalizedPath);
+        this.saveGamePath(game, normalizedPath);
       }
     }
     fileListEl.innerHTML = '<div class="loading-hint">Reading directory...</div>';
