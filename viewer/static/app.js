@@ -1107,7 +1107,9 @@ class PZViewerApp {
           case 'textured_vertex':
             child.material = new THREE.MeshStandardMaterial({
               map: ud.hasTexture ? child.material.map || ud.originalMat.map : null,
-              vertexColors: !ud.hasTexture && ud.hasColors,
+              // Three.js multiplies the sampled texture by COLOR_0 when both
+              // are enabled.  Keep this mode distinct from plain Textures.
+              vertexColors: ud.hasColors,
               side: isRoom ? THREE.FrontSide : THREE.DoubleSide,
               transparent: false,
               alphaTest: ud.hasTexture && child.material.map && child.material.map.userData?.hasAlpha ? 0.5 : 0,

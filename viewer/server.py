@@ -24,6 +24,7 @@ from pz_core.pz_pk4 import (
     parse_pk4_model,
 )
 from pz_core.pz_sgd_ff1 import merge_sgd_models, parse_sgd as parse_sgd_ff1
+from pz_core.pz_sgd_ff3 import merge_sgd_models as merge_sgd_ff3, parse_sgd as parse_sgd_ff3
 from pz_core.pz_bmd import parse_bmd_motion
 from pz_core.pz_tim2_ff3 import decode_tim2, render_tim2_clut_variation
 from pz_core.pz_tim2_ff1 import reconstruct_sgd_textures
@@ -851,6 +852,7 @@ def handle_load_file(file_path):
                         break
 
     elif ext == '.sgd':
+        path_lower = os.path.normcase(os.path.abspath(file_path))
         with open(file_path, 'rb') as f:
             base_data = f.read()
         lit_data = None
@@ -867,7 +869,12 @@ def handle_load_file(file_path):
                     with open(lit_path, "rb") as lf:
                         lit_data = lf.read()
                     break
-        model = parse_sgd_ff1(base_data, name=base_name, lit_data=lit_data)
+        # Standalone SGD files are FF3 resources by default.  FF1 SGDs only
+        # reach this branch when opened from the generated PK2-linked folder.
+        use_ff1_parser = "_pk2_linked" in path_lower
+        parse_sgd = parse_sgd_ff1 if use_ff1_parser else parse_sgd_ff3
+        merge_sgd = merge_sgd_models if use_ff1_parser else merge_sgd_ff3
+        model = parse_sgd(base_data, name=base_name, lit_data=lit_data)
         sgd_parse_metrics["sgd_processed"] += 1
         for key, value in getattr(model, "parse_diagnostics", {}).items():
             if key in sgd_parse_metrics:
@@ -917,7 +924,7 @@ def handle_load_file(file_path):
                     file_path = os.path.join(sgd_dir, candidates[0])
                     sgd_stem = os.path.splitext(candidates[0])[0]
                     with open(file_path, 'rb') as f:
-                        model = parse_sgd_ff1(f.read(), name=sgd_stem)
+                        model = parse_sgd(f.read(), name=sgd_stem)
 
             # Collect all sibling numbered SGDs sorted, excluding the file we just loaded
             norm_loaded = os.path.normcase(os.path.abspath(file_path))
@@ -935,7 +942,7 @@ def handle_load_file(file_path):
                     for sib in all_numbered:
                         try:
                             with open(os.path.join(sgd_dir, sib), 'rb') as sf:
-                                candidate = parse_sgd_ff1(sf.read(), name=sib)
+                                candidate = parse_sgd(sf.read(), name=sib)
                             if candidate and candidate.bones:
                                 model.bones = candidate.bones
                                 break
@@ -949,7 +956,7 @@ def handle_load_file(file_path):
                     try:
                         with open(sib_path, 'rb') as sf:
                             sib_data = sf.read()
-                        sib_model = parse_sgd_ff1(
+                        sib_model = parse_sgd(
                             sib_data,
                             name=os.path.splitext(sib_name)[0],
                             lit_data=lit_data,
@@ -960,7 +967,7 @@ def handle_load_file(file_path):
                             if key in sgd_parse_metrics:
                                 sgd_parse_metrics[key] += value
                         if sib_model and sib_model.meshes:
-                            merge_sgd_models(model, sib_model)
+                            merge_sgd(model, sib_model)
                             merged_count += 1
                     except Exception as e:
                         sgd_parse_metrics["sgd_omitted"] += 1
