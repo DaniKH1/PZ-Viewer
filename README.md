@@ -1,6 +1,6 @@
-# Project Zero 3 - 3D Viewer & Extractor (PZViewer)
+# Project Zero - 3D Viewer & Extractor (PZViewer)
 
-A standalone **Desktop GUI Application** for inspecting, rendering, and exporting Project Zero 3 assets, built using `MikuPan` as technical reference.
+A standalone **Desktop GUI Application** for inspecting, rendering, and exporting Project Zero 1, 2 and 3 assets, built using `MikuPan` as technical reference.
 
 ---
 
