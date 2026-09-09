@@ -186,8 +186,7 @@ def serialize_model(model, textures=None, animations=None, collision_meshes=None
                 "height": h,
                 "has_alpha": (
                     "A" in img.getbands()
-                    and img.getchannel("A").getextrema()[0] == 0
-                    and img.getchannel("A").getextrema()[1] > 0
+                    and img.getchannel("A").getextrema()[0] < 255
                 )
             })
 
@@ -1347,6 +1346,50 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         content_length = int(self.headers.get('Content-Length', 0))
         post_data = self.rfile.read(content_length)
+
+        if parsed.path == '/api/export_textures':
+            req = json.loads(post_data.decode('utf-8')) if post_data else {}
+            model = CURRENT_STATE.get("model")
+            textures = req.get("textures")
+            if not model:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "No model loaded"}).encode('utf-8'))
+                return
+            if not isinstance(textures, list) or not textures:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "No serialized textures were provided."}).encode('utf-8'))
+                return
+
+            source_file = CURRENT_STATE.get("source_file", "")
+            base_name = os.path.splitext(os.path.basename(source_file))[0] or getattr(
+                model, 'export_name', getattr(model, 'name', 'model')
+            )
+            tex_subfolder = os.path.join(EXPORTS_DIR, f"{base_name}_textures")
+            try:
+                saved = export_textures_png(model, textures, tex_subfolder)
+                zip_buf = BytesIO()
+                with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    for t_name, t_path, idx in saved:
+                        zf.write(t_path, arcname=t_name)
+                zip_bytes = zip_buf.getvalue()
+            except (OSError, ValueError) as exc:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": f"Texture export failed: {exc}"}).encode('utf-8'))
+                return
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/zip')
+            self.send_header('Content-Disposition', f'attachment; filename="{base_name}_textures.zip"')
+            self.send_header('Content-Length', str(len(zip_bytes)))
+            self.end_headers()
+            self.wfile.write(zip_bytes)
+            return
 
         if parsed.path == '/api/preferences':
             req = json.loads(post_data.decode('utf-8')) if post_data else {}
