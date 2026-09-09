@@ -847,11 +847,12 @@ def handle_load_file(file_path):
         model = parse_pk4_model(
             file_path,
             name=base_name,
-            # FF3 PK4 SGD UVs need one vertex-space vertical conversion.
-            # Do it in the PK4 parser for every asset; the serialized flag
-            # then keeps the viewer from applying a second image flip.
-            flip_uv=True
+            flip_uv=False
         )
+        if model:
+            # FF3 PK4 images need the opposite WebGL image origin; vertex UVs
+            # are already in the parser's coordinate convention.
+            model.uvs_are_flipped = True
         progress.log(
             "pk4_extraction",
             f"status=complete meshes={len(getattr(model, 'meshes', [])) if model else 0}"
@@ -906,6 +907,8 @@ def handle_load_file(file_path):
         parse_sgd = parse_sgd_ff1 if use_ff1_parser else parse_sgd_ff3
         merge_sgd = merge_sgd_models if use_ff1_parser else merge_sgd_ff3
         model = parse_sgd(base_data, name=base_name, lit_data=lit_data)
+        if not use_ff1_parser and model:
+            model.uvs_are_flipped = True
         sgd_parse_metrics["sgd_processed"] += 1
         for key, value in getattr(model, "parse_diagnostics", {}).items():
             if key in sgd_parse_metrics:
@@ -928,8 +931,6 @@ def handle_load_file(file_path):
         if not is_room_sgd and "character" in path_lower:
             model_type = "character"
             animations = find_matching_bmd_animations(file_path)[:1]
-        if not use_ff1_parser:
-            flip_uvs_vertical(model)
 
         # ── Auto-merge sibling numbered SGDs (e.g. 0000–0015 for one character) ──
         sgd_dir    = os.path.dirname(file_path)
