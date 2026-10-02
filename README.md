@@ -7,22 +7,6 @@ browser tab.
 
 ---
 
-## Current state — read this first
-
-- **No automated tests.** The Xbox test suite and its sample assets
-  (`tests/`, `examples/`) were removed to keep the project lean. Nothing
-  verifies `pz_core/` automatically any more; changes there rely on manual
-  checking. `pytest` is not a dependency.
-- **`docs/validation/` is gone.** It held a hash manifest and diagnostic
-  renders. The two format specifications in
-  [docs/ff1x-sgd1060.md](docs/ff1x-sgd1060.md) and
-  [docs/xbox-xpr.md](docs/xbox-xpr.md) remain valid: they describe the byte
-  layout, not the samples.
-- The viewer, the parsers, the CLI and the exporter are unaffected. Real
-  assets from your own game folders load and export.
-
----
-
 ## Games
 
 | Entry | Games | Containers |
