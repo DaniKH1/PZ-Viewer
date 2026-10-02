@@ -9,17 +9,15 @@ browser tab.
 
 ## Current state — read this first
 
-- **No automated tests.** The Xbox test suite and its sample assets
-  (`tests/`, `examples/`) were removed to keep the project lean. Nothing
-  verifies `pz_core/` automatically any more; changes there rely on manual
-  checking. `pytest` is not a dependency.
-- **`docs/validation/` is gone.** It held a hash manifest and diagnostic
-  renders. The two format specifications in
-  [docs/ff1x-sgd1060.md](docs/ff1x-sgd1060.md) and
-  [docs/xbox-xpr.md](docs/xbox-xpr.md) remain valid: they describe the byte
-  layout, not the samples.
-- The viewer, the parsers, the CLI and the exporter are unaffected. Real
-  assets from your own game folders load and export.
+- Supports the PS2 releases of Fatal Frame 1–3, Fatal Frame 1 Xbox and Fatal
+  Frame 2 Wii, including model viewing, texture inspection and 3D export.
+- Recent parser and viewer improvements include static room lighting,
+  recovered vertex colors, Xbox PKX room textures, Wii character transparency,
+  game-specific asset filtering and organized per-game parser/documentation
+  packages.
+- There is no automated test suite. Python module imports, the viewer/CLI
+  entry points and documentation links should be checked when making changes.
+- Documentation is grouped by game; see the [documentation index](docs/README.md).
 
 ---
 
@@ -30,7 +28,7 @@ browser tab.
 | **Original** | Fatal Frame 1 (PS2) | `.mdl`, `.pk2`, `.sgd`, `.tim2`, `.mpx` |
 | | Fatal Frame 2 (PS2) | `.pk2`, `.sgd`, `.tim2`, `.tm2` |
 | | Fatal Frame 3 (PS2) | `.pk4`, `.sgd`, `.tm2` |
-| **Extra** | Fatal Frame 1 XBOX | `.mpx` |
+| **Extra** | Fatal Frame 1 XBOX | `.mpx`, `.pkx` |
 | | Fatal Frame 2 Wii | `.mdlb`, `.pk2b` |
 
 The two Xbox/Wii ports live on their own tab because each is a port of a game
@@ -40,27 +38,41 @@ a second tab.
 
 ### Fatal Frame 1 XBOX
 
-`.mpx` files carry geometry and their XPR0 textures together, and are read
-natively: real UVs, triangle-strip indices, weighted bones and BC3 textures
-with alpha. The `.mdl` files that ship next to them share the PK2_HEAD
-container with the PS2 originals but use geometry records the PS2 parser does
-not read, so they are hidden from the tree; two of the 64 parse if you type
-the path by hand.
+`.mpx` files carry character geometry and XPR0 textures; `.pkx` files carry
+item, furniture, door and room geometry with embedded XPR0 textures. Both are
+parsed natively. MPX supports UVs, triangle strips, weighted bones and BC3
+textures with alpha. PKX supports room geometry, P8 textures with embedded
+palettes, DXT3/5 textures and room-lighting data from matching `.lit` files.
+Xbox character orientation and room vertex lighting are handled by the
+Xbox-specific paths.
 
-Character .mdl files are handled by the PS2 parser and come out geometrically
-identical to the PS2 original, only without textures, because the surfaces live
-in the embedded archive.
-
-The container layout is written up in
-[docs/ff1x-sgd1060.md](docs/ff1x-sgd1060.md) and the texture archive in
-[docs/xbox-xpr.md](docs/xbox-xpr.md). Both describe the byte layout, so they
-stay valid even though the sample files they were measured against are gone.
+The container layouts are written up in
+[docs/ff1x/sgd-1060-format.md](docs/ff1x/sgd-1060-format.md),
+[docs/ff1x/pkx-format.md](docs/ff1x/pkx-format.md) and the texture archive in
+[docs/ff1x/xpr-format.md](docs/ff1x/xpr-format.md).
 
 ### Fatal Frame 2 Wii
 
 Each model ships in its own unit scale, so a per-kind factor is applied on
 load (character, room, prop) to bring them into the same range as the FF3
 assets. The rig scale is baked into the geometry rather than the mesh nodes.
+Character texture masks declared by the model are composed with their base
+textures, including partial alpha for hair, eyelashes and clothing details.
+Transparency rendering keeps depth writing enabled for these partial-alpha
+character textures to reduce sorting artifacts.
+
+### Rendering and asset data
+
+- FF1 PS2 room `.lit` data is used to bake static lighting into vertex colors.
+  Xbox rooms use their matching `.lit` sidecars for the corresponding
+  game-specific lighting path.
+- FF2 PS2 rooms can use recovered stored GS vertex colors. The viewer exposes
+  vertex colors as a separate toggle, and the game-specific exporters preserve
+  the supported color data.
+- Xbox PKX textures are linked to their materials, including embedded
+  palettes and mip levels where available.
+- FF2 Wii models retain their decoded vertex colors and declared texture
+  alpha masks when displayed and exported.
 
 ---
 
@@ -89,6 +101,10 @@ SGD, texture and linked resource files resolve correctly.
 - Navigation never leaves the saved root. At a root there is no
   `.. (Parent Directory)` row, and the up control is gone — a folder with
   nothing loadable in it offers **`... (Parent Folder)`** instead.
+- Known non-loadable or redundant entries are filtered for the selected game;
+  filtering only hides entries in the browser and does not delete files. This
+  includes auxiliary FF3 character folders and model variants, FF2 Wii room
+  folders, and known unsupported FF2 furniture PK2 files.
 
 ---
 
@@ -205,15 +221,13 @@ python pz_export_cli.py "f:/r1x/man/mdl/m000_miku4.mpx" -f glb,obj -o ./exported
 
 ## Known limitations
 
-- **FF1 non-character textures come out grey.** Every FF1 item, door and
-  furniture page decodes to neutral grey across all 24 assets. Vertex colours
-  and material channels are grey too, so it is not a shading setting. GS VRAM
-  addressing and PSMT8 swizzling match the reference implementation byte for
-  byte, which applies no colour modulation either. Not reproduced.
+- Some FF1 PS2 item, door and furniture textures still render grey; this is a
+  separate limitation from the room-lighting and Xbox PKX texture paths.
 - The camera fit has a 25-unit minimum distance, so small FF2 Wii props render
   small in the viewport.
-- FF1 room sheets carry colour in the vertex buffer rather than a texture, so
-  they preview untextured.
+- FF1 room surfaces that carry appearance in vertex colors rather than a
+  texture preview without a surface texture; enable **Vertex Colors** to see
+  their stored or baked color.
 
 ---
 
@@ -230,10 +244,25 @@ viewer/                 HTTP server and the whole UI
   static/index.html     markup
   static/style.css      styles and the five palettes
   static/*.png          the viewer icon and the per-game camera icons
-pz_core/                the parsers
-docs/                   Xbox format specifications and delivery notes
+pz_core/
+  common/               shared model types and low-level helpers
+  ff1/                  Fatal Frame 1 PS2 parsers
+  ff1x/                 Fatal Frame 1 Xbox parsers
+  ff2/                  Fatal Frame 2 PS2 parsers
+  ff2w/                 Fatal Frame 2 Wii parsers
+  ff3/                  Fatal Frame 3 PS2 parsers
+  export/               shared exporter and game-specific adapters
+docs/
+  ff1/, ff1x/, ff2/     guides, format notes and validation artifacts
+  ff2w/                 Wii formats and repair notes
+  architecture/         cross-game technical notes
+  history/              historical delivery manifests
 tools/                  analysis scripts referenced by docs/
 ```
+
+Parser modules keep their original `pz_*.py` filenames within the game and
+responsibility folders. The [documentation index](docs/README.md) links to
+each game's guides, format notes and validation material.
 
 ---
 

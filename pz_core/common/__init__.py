@@ -1,0 +1,1 @@
+"""Shared model types and low-level format helpers."""

@@ -1,0 +1,1 @@
+"""Fatal Frame 2 Wii parsers and utilities."""

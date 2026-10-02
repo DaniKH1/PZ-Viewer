@@ -1,0 +1,321 @@
+{
+  "source": "r000_genkan.pk2",
+  "source_sha256": "42e7a57607a4bce683a057cf15d9e55c01311e54b13be86fcc1225631bce8d99",
+  "stats": {
+    "vertices": 9667,
+    "triangles": 5665,
+    "submeshes": 262,
+    "bones": 143,
+    "textures": 26
+  },
+  "lighting": {
+    "format": "ff1_static_vertex_lighting",
+    "status": "baked",
+    "meshes_baked": 262,
+    "vertices_baked": 9667,
+    "preset_vertices": 9655,
+    "stored_local_vertices": 0,
+    "repeat_markers": 408,
+    "point_lit_vertices": 7225,
+    "spot_lit_vertices": 2204,
+    "overbright_vertices": 53,
+    "warnings": [],
+    "source": "lit_sidecar",
+    "lights": {
+      "format": "ff1_lit",
+      "ambient": [
+        0.25999999046325684,
+        0.20999999344348907,
+        0.2499999850988388,
+        0.0
+      ],
+      "directionals": [],
+      "points": [
+        {
+          "offset": 96,
+          "diffuse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "pos": [
+            12.697246551513672,
+            52.0184211730957,
+            -128.1488800048828,
+            1.0
+          ],
+          "power": 60.0,
+          "cutoff_parameter": 0.0
+        },
+        {
+          "offset": 128,
+          "diffuse": [
+            0.11999998986721039,
+            0.09999999403953552,
+            0.06999999284744263,
+            0.0
+          ],
+          "pos": [
+            122.83309173583984,
+            24.115266799926758,
+            -99.32553100585938,
+            1.0
+          ],
+          "power": 60.0,
+          "cutoff_parameter": 0.0
+        },
+        {
+          "offset": 160,
+          "diffuse": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "pos": [
+            82.84272766113281,
+            96.18449401855469,
+            -32.62910842895508,
+            1.0
+          ],
+          "power": 60.0,
+          "cutoff_parameter": 0.0
+        },
+        {
+          "offset": 192,
+          "diffuse": [
+            0.25999999046325684,
+            0.22999998927116394,
+            0.15999998152256012,
+            0.0
+          ],
+          "pos": [
+            86.65633392333984,
+            38.052589416503906,
+            -203.4045867919922,
+            1.0
+          ],
+          "power": 60.0,
+          "cutoff_parameter": 0.0
+        }
+      ],
+      "spots": [
+        {
+          "offset": 240,
+          "diffuse": [
+            0.13999998569488525,
+            0.15999998152256012,
+            0.22999998927116394,
+            0.0
+          ],
+          "pos": [
+            83.33147430419922,
+            130.7953643798828,
+            -4.6963911056518555,
+            19.0
+          ],
+          "target": [
+            83.63347625732422,
+            62.78202438354492,
+            -61.74838638305664,
+            15.0
+          ],
+          "direction": [
+            -0.302001953125,
+            68.01333999633789,
+            57.051995277404785
+          ],
+          "half_angle_degrees": 19.0,
+          "power": 200.0
+        }
+      ],
+      "records": [
+        {
+          "block": 0,
+          "offset": 80,
+          "subtype": 1,
+          "count": 4
+        },
+        {
+          "block": 0,
+          "offset": 224,
+          "subtype": 2,
+          "count": 1
+        },
+        {
+          "block": 0,
+          "offset": 288,
+          "subtype": 3,
+          "count": 1
+        }
+      ]
+    },
+    "parts": [
+      {
+        "format": "ff1_static_vertex_lighting",
+        "status": "baked",
+        "meshes_baked": 35,
+        "vertices_baked": 2144,
+        "preset_vertices": 2144,
+        "stored_local_vertices": 0,
+        "repeat_markers": 33,
+        "point_lit_vertices": 1507,
+        "spot_lit_vertices": 287,
+        "overbright_vertices": 7,
+        "warnings": [],
+        "source": "lit_sidecar"
+      },
+      {
+        "format": "ff1_static_vertex_lighting",
+        "status": "baked",
+        "meshes_baked": 3,
+        "vertices_baked": 12,
+        "preset_vertices": 0,
+        "stored_local_vertices": 0,
+        "repeat_markers": 0,
+        "point_lit_vertices": 12,
+        "spot_lit_vertices": 0,
+        "overbright_vertices": 0,
+        "warnings": [],
+        "source": "lit_sidecar"
+      }
+    ]
+  },
+  "rgb_min": [
+    0.02599999943375586,
+    0.020999999657273283,
+    0.024999998882412888
+  ],
+  "rgb_max": [
+    1.9921875,
+    1.762357415312037,
+    1.2858206792721947
+  ],
+  "rgb_mean": [
+    0.1349030433739091,
+    0.11826644140361664,
+    0.10256746111016597
+  ],
+  "distinct_rgb_6decimals": 5926,
+  "texture_rgba_sha256": [
+    "62bfe8230fb577fcc635673216c11dfb7024c878f7d91b6735afe5a45fba7973",
+    "7e7eb3b758a239655ee8c9b484ec668cbe68e7e1ac809cd31b0c8adf3acb3677",
+    "5fe8cdc14fe0aa0151ecacdae91fe7b76bdf56ef747351f5a92133324b071b27",
+    "9d8dff1156a89504dfb701f1db8d8d464a1877756b8fd0e750a446a94ea3cd06",
+    "3ec63e327f7af25db810d766ba8bf31ceccb0b7315a352c58af94d771752a0bc",
+    "f298d4556aa785550da2182c267c4c17dc6929d544361038c7434b32d4657eb2",
+    "75c85d4ff5b56895cf520d71bbd05d4d411438c46a65255fedc4f45a22ec7ce7",
+    "252f57293cdc2fb9009ac1d6e8c7e4fd3fd98b89f9c52055d05f84c59fe4cf42",
+    "08f7de87fa2fa859d57b9bd8e94a5380a885dd7577c7e7a1147e9c6b64c519d7",
+    "532954de003e5f1bac2bfc6d001143ab7828839d31f253b760f33eb0c5a83f96",
+    "b2b43309a4464e3531c428157e5f3fbed0d5812de56b95ffc424c32a789c70b6",
+    "318166f3097c7ae62903a9dfcd969f085775818024960bb87e619626f9b45332",
+    "31f5f9d1d739579f3c64c5d6f120b03710009261c67f698c1c7553575ed1d16a",
+    "3b0a3a8a4cfedc16773d4d74714743deeadb51a9991e961c817e84812c090135",
+    "9e8ecc99b5de9cde67055ea7df70cf8307220318554a0424fe757fe7e831a423",
+    "c6bc5d32f8869babb18ea6518e5508c51b47a4732f80bc71eee4b61faaa7db9e",
+    "963a04f81e3be233e9655f9f22d5f1db4cf8a8657bbd5c2d579a797c7f65ffe8",
+    "3fb6363e84a9aedc5b36f1e34cee13cd751ac2077a18717e5ba59f3b26ea502d",
+    "1dffba1f4ad73900bfae261c11d42585b056d3bae0984cda9a954e12c3216d92",
+    "8a283362dd448d37669349af1a5acefd8e06ca37d68ea4769e063345e02ed8a2",
+    "7b5bd6330ba33e0f51d7382cc46d7cd65fd763e6f03528780b9109af7cb387d6",
+    "d5e2a58a49896139f918f0c5183f76d77bcac274bd00ef3d69a1e8cf6c2adaf4",
+    "2cbd16f6fbb50ce6f5a87f57e8ccd9282c0762b0a8ee07ee95fd3e838c0b4cc6",
+    "bf0abeda70a98d3bcb8ba8295e791ad21e6369e3634090b49f961bfffb2dd0dc",
+    "7ba5c362b242c9ee7ea3c5944ee434b8b6a5e52e5b93bd6799bafed1ba19e095",
+    "9fd830401d6aa84667541d40e15c7fa09ac9de23328678dbb4e694049493528d"
+  ],
+  "renders": [
+    {
+      "file": "r000_genkan_old-flat.png",
+      "camera": [
+        -93.49850010871887,
+        136.6146499991417,
+        -365.4993072509765
+      ],
+      "target": [
+        84.00049996376038,
+        58.32993999004364,
+        -107.62100219726562
+      ],
+      "drawn_triangles": 2450,
+      "mode": "old-flat"
+    },
+    {
+      "file": "r000_genkan_lit.png",
+      "camera": [
+        -93.49850010871887,
+        136.6146499991417,
+        -365.4993072509765
+      ],
+      "target": [
+        84.00049996376038,
+        58.32993999004364,
+        -107.62100219726562
+      ],
+      "drawn_triangles": 2450,
+      "mode": "lit"
+    },
+    {
+      "file": "r000_genkan_textures.png",
+      "camera": [
+        -93.49850010871887,
+        136.6146499991417,
+        -365.4993072509765
+      ],
+      "target": [
+        84.00049996376038,
+        58.32993999004364,
+        -107.62100219726562
+      ],
+      "drawn_triangles": 2450,
+      "mode": "textures"
+    },
+    {
+      "file": "r000_genkan_point.png",
+      "camera": [
+        -93.49850010871887,
+        136.6146499991417,
+        -365.4993072509765
+      ],
+      "target": [
+        84.00049996376038,
+        58.32993999004364,
+        -107.62100219726562
+      ],
+      "drawn_triangles": 2450,
+      "mode": "point"
+    },
+    {
+      "file": "r000_genkan_spot.png",
+      "camera": [
+        -93.49850010871887,
+        136.6146499991417,
+        -365.4993072509765
+      ],
+      "target": [
+        84.00049996376038,
+        58.32993999004364,
+        -107.62100219726562
+      ],
+      "drawn_triangles": 2450,
+      "mode": "spot"
+    },
+    {
+      "file": "r000_genkan_ambient.png",
+      "camera": [
+        -93.49850010871887,
+        136.6146499991417,
+        -365.4993072509765
+      ],
+      "target": [
+        84.00049996376038,
+        58.32993999004364,
+        -107.62100219726562
+      ],
+      "drawn_triangles": 2450,
+      "mode": "ambient"
+    }
+  ]
+}

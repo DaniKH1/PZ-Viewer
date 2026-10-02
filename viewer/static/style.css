@@ -412,6 +412,9 @@ body {
   color: var(--text-secondary);
   white-space: nowrap;
 }
+.file-item[hidden] {
+  display: none;
+}
 .file-icon { width: 18px; text-align: center; flex: 0 0 18px; }
 .file-name { overflow: hidden; text-overflow: ellipsis; }
 .file-meta { margin-left: auto; color: var(--text-muted); font-size: 10px; }
@@ -514,6 +517,15 @@ body {
 }
 .file-item.file-sgd {
   color: var(--ok-text);
+}
+.file-item.selected {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  box-shadow: inset 2px 0 var(--accent-color);
+}
+.file-list:focus-visible {
+  outline: 1px solid var(--accent-color);
+  outline-offset: -1px;
 }
 
 /* Stats Table */

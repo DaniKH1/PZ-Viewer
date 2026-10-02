@@ -1,0 +1,18 @@
+........................................................................ [ 79%]
+...................                                                      [100%]
+91 passed in 19.91s
+
+
+.................................                                        [100%]
+33 passed in 6.48s
+
+
+.........                                                                [100%]
+9 passed, 11 deselected in 17.65s
+
+
+...........                                                              [100%]
+11 passed, 9 deselected in 18.70s
+
+TOTAL: 144 pruebas aprobadas (91 FF1, 53 FF2), en cuatro lotes.
+La prueba WebGL interactiva no se completo; ver FF2_BROWSER_CHECK.json.

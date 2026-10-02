@@ -4,16 +4,16 @@ import argparse
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from pz_core.pz_pk4 import parse_pk4_model
-from pz_core.pz_pk2 import unpack_room_pk2
-from pz_core.pz_pk2_ff2 import unpack_room_pk2 as unpack_room_pk2_ff2
-from pz_core.pz_sgd_ff1 import parse_sgd as parse_sgd_ff1
-from pz_core.pz_sgd_ff2 import parse_sgd as parse_sgd_ff2
-from pz_core.pz_mdl_ff1 import FF1MDLError, parse_ff1_mdl
-from pz_core.pz_export import export_glb, export_obj, export_dae, export_fbx
-from pz_core.pz_mpx_ff1x import XboxMPXError, parse_mpx
-from pz_core.pz_xpr0 import XPR0Error
-from pz_core.pz_export_xbox import (
+from pz_core.ff3.pz_pk4 import parse_pk4_model
+from pz_core.common.pz_pk2 import unpack_room_pk2
+from pz_core.ff2.pz_pk2_ff2 import unpack_room_pk2 as unpack_room_pk2_ff2
+from pz_core.ff1.pz_sgd_ff1 import parse_sgd as parse_sgd_ff1
+from pz_core.ff2.pz_sgd_ff2 import parse_sgd as parse_sgd_ff2
+from pz_core.ff1.pz_mdl_ff1 import FF1MDLError, parse_ff1_mdl
+from pz_core.export.pz_export import export_glb, export_obj, export_dae, export_fbx
+from pz_core.ff1x.pz_mpx_ff1x import XboxMPXError, parse_mpx
+from pz_core.ff1x.pz_xpr0 import XPR0Error
+from pz_core.export.pz_export_xbox import (
     export_obj as export_xbox_aware_obj,
     export_glb as export_xbox_aware_glb,
 )

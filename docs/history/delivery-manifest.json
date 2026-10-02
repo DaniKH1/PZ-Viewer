@@ -1,0 +1,479 @@
+{
+  "input_archive": "PZViewer_FF1_color_huesos.zip",
+  "input_sha256": "a3c4690c4441583adc2b2049a1f5c98123d31a696d05cb58eb1d5e97ada18d00",
+  "original_user_archive": "PZ Viewer(1).zip",
+  "original_user_archive_sha256": "2e92df8f2419a963eff49a49902f9064b699341f853e11ed1b8f59e953b30587",
+  "scope": "FF1 PS2 static LIT and vertex lighting; previous palette and bone fixes retained",
+  "verification_date": "2026-10-02",
+  "notes": "Manifest excludes itself. Prior delivery manifest preserved in docs/FF1_COLOR_POSE_DELIVERY_MANIFEST.json.",
+  "files": [
+    {
+      "path": "LEEME_FF1.md",
+      "sha256": "fbd57244531aae3b2bf0ec3dfd50f4d4eb09f8e623b0a716a8ad135be989e95e",
+      "previous_sha256": "50f2b3874af010aefb9e4c596612369808be8965c61757784e54ffeef047dc00",
+      "status": "modified"
+    },
+    {
+      "path": "LEEME_ILUMINACION_FF1.md",
+      "sha256": "5164bc417d236937866e2f5ea5f762256e1a0ac6e58f5034db8d4a49b1c799b5",
+      "status": "added"
+    },
+    {
+      "path": "README.md",
+      "sha256": "a84d356f0cdff646e815433e2b7a5de0fcaf3985da653b5d304dcd264ae35d77",
+      "previous_sha256": "d90b377ef055a9afbb6c190c733dd24094886b997ac011c6d6490a08e56bf360",
+      "status": "modified"
+    },
+    {
+      "path": "docs/ANMB_FORMAT.md",
+      "sha256": "78847d050c2b0d341c4b4b84484142a355b0ba335250cd6cb0175a95ddffed1e",
+      "previous_sha256": "78847d050c2b0d341c4b4b84484142a355b0ba335250cd6cb0175a95ddffed1e",
+      "status": "unchanged"
+    },
+    {
+      "path": "docs/FF1_COLOR_AND_POSE.md",
+      "sha256": "a6560afba0771da8ce0c9d6147bd3a798a36470e926d8b1e4548ddda75ff8373",
+      "previous_sha256": "a6560afba0771da8ce0c9d6147bd3a798a36470e926d8b1e4548ddda75ff8373",
+      "status": "unchanged"
+    },
+    {
+      "path": "docs/FF1_COLOR_POSE_DELIVERY_MANIFEST.json",
+      "sha256": "50d820b1cf8700b987447a196dc019c543d44a620fe1d7b5741a5d97c8e699e1",
+      "status": "added"
+    },
+    {
+      "path": "docs/FF1_LIGHTING_VALIDACION_TRABAJO.txt",
+      "sha256": "4721035a9020d5158f45e5d328d2a55794a8703d9f6d7d793aadbda362110f45",
+      "status": "added"
+    },
+    {
+      "path": "docs/FF1_ROOM_INSPECTION.json",
+      "sha256": "e29d27179c0be50962e7a21a7bf53dca7fa037bd2e4b4890275b0cb1b6517384",
+      "previous_sha256": "e29d27179c0be50962e7a21a7bf53dca7fa037bd2e4b4890275b0cb1b6517384",
+      "status": "unchanged"
+    },
+    {
+      "path": "docs/FF1_ROOM_LIGHTING.md",
+      "sha256": "54d77bcb8918ff37b010862180279364dfb93e05613055ff53ab94ab22e02565",
+      "status": "added"
+    },
+    {
+      "path": "docs/FF1_VALIDACION.txt",
+      "sha256": "6a0a4aed82884f16f2fe346215795d86bb84137bf26f36b1436e64135d52c822",
+      "previous_sha256": "6a0a4aed82884f16f2fe346215795d86bb84137bf26f36b1436e64135d52c822",
+      "status": "unchanged"
+    },
+    {
+      "path": "docs/GLTF_EXPORT_PIPELINE.md",
+      "sha256": "3f8d9bd9f423c85411149e78cc2484437a9d44cd887923119335b030453ca5ac",
+      "previous_sha256": "3f8d9bd9f423c85411149e78cc2484437a9d44cd887923119335b030453ca5ac",
+      "status": "unchanged"
+    },
+    {
+      "path": "docs/INFORME_XBOX.md",
+      "sha256": "a3d8b91eaa3cf8474366b30d74cca487776632e6adfdfa173623d76e42ae0c25",
+      "previous_sha256": "a3d8b91eaa3cf8474366b30d74cca487776632e6adfdfa173623d76e42ae0c25",
+      "status": "unchanged"
+    },
+    {
+      "path": "docs/LEEME_WII.md",
+      "sha256": "a0e000ba42c21119ccc11066fc78f97ff89941bbf19fdab519d4b35cbbd40c92",
+      "previous_sha256": "a0e000ba42c21119ccc11066fc78f97ff89941bbf19fdab519d4b35cbbd40c92",
+      "status": "unchanged"
+    },
+    {
+      "path": "docs/LEEME_XBOX.md",
+      "sha256": "d7199e387d9d81b583f3676192dd04b90248448b53f14e4c56e30095298a2f2e",
+      "previous_sha256": "d7199e387d9d81b583f3676192dd04b90248448b53f14e4c56e30095298a2f2e",
+      "status": "unchanged"
+    },
+    {
+      "path": "docs/LZ11_COMPRESSION.md",
+      "sha256": "98e01719cfc879ba3c660e165736df71db9f1595f2736a348ff7c963a743a6f2",
+      "previous_sha256": "98e01719cfc879ba3c660e165736df71db9f1595f2736a348ff7c963a743a6f2",
+      "status": "unchanged"
+    },
+    {
+      "path": "docs/MDLB_FORMAT.md",
+      "sha256": "378efea189b7ee1caca06a3142452307ad0c8e4e9381aa5756187d75b33425a9",
+      "previous_sha256": "378efea189b7ee1caca06a3142452307ad0c8e4e9381aa5756187d75b33425a9",
+      "status": "unchanged"
+    },
+    {
+      "path": "docs/PK2B_FORMAT.md",
+      "sha256": "14b937d032cf2a6b3741b6c2a2e032946d6a0550dcce536a1f75ad978a758d74",
+      "previous_sha256": "14b937d032cf2a6b3741b6c2a2e032946d6a0550dcce536a1f75ad978a758d74",
+      "status": "unchanged"
+    },
+    {
+      "path": "docs/PPDB_FORMAT.md",
+      "sha256": "c320bf5533879bcf3fd96d0b3a2390be08c8776ab2a88da433c2382b88f51b72",
+      "previous_sha256": "c320bf5533879bcf3fd96d0b3a2390be08c8776ab2a88da433c2382b88f51b72",
+      "status": "unchanged"
+    },
+    {
+      "path": "docs/WII_REPAIR.md",
+      "sha256": "7277dfc20e262e342a1ea6403aad93648984e57184956c7589c8c56b59a0f04b",
+      "previous_sha256": "7277dfc20e262e342a1ea6403aad93648984e57184956c7589c8c56b59a0f04b",
+      "status": "unchanged"
+    },
+    {
+      "path": "docs/ff1_room_lighting_evidence.json",
+      "sha256": "ed1e82178751c44a56b5ae6387790a6518a614fe1203ca3bba9b9b2673374803",
+      "status": "added"
+    },
+    {
+      "path": "docs/ff1x-sgd1060.md",
+      "sha256": "b14df263e8b849a8537571dae7cca17467d428fc4ca0eeea80154c233713e00f",
+      "previous_sha256": "b14df263e8b849a8537571dae7cca17467d428fc4ca0eeea80154c233713e00f",
+      "status": "unchanged"
+    },
+    {
+      "path": "docs/xbox-xpr.md",
+      "sha256": "bd8c1e3bd840228300af2143d382af935901e5db36c923d0e746b2a9962d6a76",
+      "previous_sha256": "bd8c1e3bd840228300af2143d382af935901e5db36c923d0e746b2a9962d6a76",
+      "status": "unchanged"
+    },
+    {
+      "path": "examples/f012_savepnt.sgd",
+      "sha256": "27e322fcb93e7f4c74b8d4f7e40bacc99518dfa3df1cae84a460bc553f0b36c4",
+      "previous_sha256": "27e322fcb93e7f4c74b8d4f7e40bacc99518dfa3df1cae84a460bc553f0b36c4",
+      "status": "unchanged"
+    },
+    {
+      "path": "examples/i000_play_camera1.sgd",
+      "sha256": "82db38cc3032382fa3cd49046466279362d662412a93d7dcdb781cdd0b6993e6",
+      "previous_sha256": "82db38cc3032382fa3cd49046466279362d662412a93d7dcdb781cdd0b6993e6",
+      "status": "unchanged"
+    },
+    {
+      "path": "examples/m001_mafuyu.acs",
+      "sha256": "d1cf2c0271f28f3d86ecdc8e241455ab53648e1b9b9eef93683ef1cc43d4c8ef",
+      "previous_sha256": "d1cf2c0271f28f3d86ecdc8e241455ab53648e1b9b9eef93683ef1cc43d4c8ef",
+      "status": "unchanged"
+    },
+    {
+      "path": "examples/m001_mafuyu.bwc",
+      "sha256": "41cc1f2ea019e0e14e6e8d7062af42f02ce908eb7fdc49ce2886622fd83a9ced",
+      "previous_sha256": "41cc1f2ea019e0e14e6e8d7062af42f02ce908eb7fdc49ce2886622fd83a9ced",
+      "status": "unchanged"
+    },
+    {
+      "path": "examples/m001_mafuyu.clt",
+      "sha256": "8ad58f5796f11300434a1540ffd70789dbc699b2101b1150ecf664ebc8acbdb0",
+      "previous_sha256": "8ad58f5796f11300434a1540ffd70789dbc699b2101b1150ecf664ebc8acbdb0",
+      "status": "unchanged"
+    },
+    {
+      "path": "examples/m001_mafuyu.mdl",
+      "sha256": "4240562169165b266cc2e4b0b69f5261e00069a99c81a8ed3f1b861313a1e40c",
+      "previous_sha256": "4240562169165b266cc2e4b0b69f5261e00069a99c81a8ed3f1b861313a1e40c",
+      "status": "unchanged"
+    },
+    {
+      "path": "examples/m001_mafuyu.mpk",
+      "sha256": "dbcaab73f24cfbf54b495dc5f5f0a21f1a5b2a24886acbee40b5ddc84cb01470",
+      "previous_sha256": "dbcaab73f24cfbf54b495dc5f5f0a21f1a5b2a24886acbee40b5ddc84cb01470",
+      "status": "unchanged"
+    },
+    {
+      "path": "examples/r000_genkan.lit",
+      "sha256": "7bea655e26f8887b4eef1f220f2acea2a5e3988184e7b8cd8fbd9121dc40796b",
+      "previous_sha256": "7bea655e26f8887b4eef1f220f2acea2a5e3988184e7b8cd8fbd9121dc40796b",
+      "status": "unchanged"
+    },
+    {
+      "path": "examples/r000_genkan.mim",
+      "sha256": "fd2be2b32073f4e3243753b98c60e2f0816a728d114885c100b2132740e53159",
+      "previous_sha256": "fd2be2b32073f4e3243753b98c60e2f0816a728d114885c100b2132740e53159",
+      "status": "unchanged"
+    },
+    {
+      "path": "examples/r000_genkan.pk2",
+      "sha256": "42e7a57607a4bce683a057cf15d9e55c01311e54b13be86fcc1225631bce8d99",
+      "previous_sha256": "42e7a57607a4bce683a057cf15d9e55c01311e54b13be86fcc1225631bce8d99",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/__init__.py",
+      "sha256": "15cd1d1e4c89d4af1539f132216adc15cce00ba80d61151ab9cf78d749823263",
+      "previous_sha256": "15cd1d1e4c89d4af1539f132216adc15cce00ba80d61151ab9cf78d749823263",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_collision.py",
+      "sha256": "51c682dd213a7da937946ea32077271d5a66557f5911cde67c8c135c44f4d729",
+      "previous_sha256": "51c682dd213a7da937946ea32077271d5a66557f5911cde67c8c135c44f4d729",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_export.py",
+      "sha256": "f774dac794a79004c4d5f0f2e3077a4e14d48895723521f32c77f07918034e6e",
+      "previous_sha256": "f774dac794a79004c4d5f0f2e3077a4e14d48895723521f32c77f07918034e6e",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_export_ff1.py",
+      "sha256": "b91a8bb910881e6e789dd88065ef81c3b3f1d300a35f9164a57861a175a9e80c",
+      "status": "added"
+    },
+    {
+      "path": "pz_core/pz_export_xbox.py",
+      "sha256": "df2ab4ac045dfdafc99368d02584a828149e3dd67702fa6f720a8cc8efca1000",
+      "previous_sha256": "df2ab4ac045dfdafc99368d02584a828149e3dd67702fa6f720a8cc8efca1000",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_ff1_pose.py",
+      "sha256": "32bcdf080e282e55d337fe77b2afef41fa02dfcce723b7bb1f619d1a1fa6238c",
+      "previous_sha256": "32bcdf080e282e55d337fe77b2afef41fa02dfcce723b7bb1f619d1a1fa6238c",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_gs_ff1.py",
+      "sha256": "3125a03e655834234da3498b4e92d36392acf93c90800b3d816004c854dd9331",
+      "previous_sha256": "3125a03e655834234da3498b4e92d36392acf93c90800b3d816004c854dd9331",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_gs_vram.py",
+      "sha256": "b57ef25e52a461db50ee6d2b9f4af543c1e419bb5b5adfabfca99bc27ea3a0ec",
+      "previous_sha256": "b57ef25e52a461db50ee6d2b9f4af543c1e419bb5b5adfabfca99bc27ea3a0ec",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_lighting_ff1.py",
+      "sha256": "a575c3abd3671f747c016f7d0c58cee22248b4519e5e22abb3fb0690cbe644bc",
+      "status": "added"
+    },
+    {
+      "path": "pz_core/pz_mdl_ff1.py",
+      "sha256": "20188fd997c7a14fb2aea64eafde48742a59c1648400c304e72150dcebef892c",
+      "previous_sha256": "20188fd997c7a14fb2aea64eafde48742a59c1648400c304e72150dcebef892c",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_mdlb_ff2w.py",
+      "sha256": "f681f53aadaeb4c8547903fab281084081356a2342e2daa6a41823b6fb6ddda1",
+      "previous_sha256": "f681f53aadaeb4c8547903fab281084081356a2342e2daa6a41823b6fb6ddda1",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_mpx_ff1x.py",
+      "sha256": "aabff7cb51dd31782a0dfcfc36b4bd0d61bdb9a3e4eaaadf6f09f5472fc20dfc",
+      "previous_sha256": "aabff7cb51dd31782a0dfcfc36b4bd0d61bdb9a3e4eaaadf6f09f5472fc20dfc",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_pk2.py",
+      "sha256": "20675a04f61f1fd26a86165c6b88f35bc2e3fbfb257f8cc606b2994b89a25e7c",
+      "previous_sha256": "20675a04f61f1fd26a86165c6b88f35bc2e3fbfb257f8cc606b2994b89a25e7c",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_pk2_ff2.py",
+      "sha256": "f5fec02c1251be58b14418d784b61c16067481a4f5c90a890558af92c1f5d01c",
+      "previous_sha256": "f5fec02c1251be58b14418d784b61c16067481a4f5c90a890558af92c1f5d01c",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_pk4.py",
+      "sha256": "285575e5ff916da00ab4917362368dc9e723fab30631b8a78e805d8dd8efc0cf",
+      "previous_sha256": "285575e5ff916da00ab4917362368dc9e723fab30631b8a78e805d8dd8efc0cf",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_sgd.py",
+      "sha256": "6668095cca5e769662cc5d60a1c28572c3949ec3c0d04b8f6407f054b52ee163",
+      "previous_sha256": "6668095cca5e769662cc5d60a1c28572c3949ec3c0d04b8f6407f054b52ee163",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_sgd_ff1.py",
+      "sha256": "85697e3e667df8b277e1b505b32ffa5adb9531c12fa590ca59a02a77cb657e5b",
+      "previous_sha256": "6155f72f92e8e4f6a51ea6b226f1d2c24a91b14fdeaee4417e1369b7fb7ede52",
+      "status": "modified"
+    },
+    {
+      "path": "pz_core/pz_sgd_ff2.py",
+      "sha256": "eafcdaf6ed85f6ea3149396445476e1f6874700ccd23240bfbc6d419de1ff24b",
+      "previous_sha256": "eafcdaf6ed85f6ea3149396445476e1f6874700ccd23240bfbc6d419de1ff24b",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_sgd_ff3.py",
+      "sha256": "1d0fbddfbfece9e83e4e738ad969e00a22dd437f6312f94157ed19a1658d828c",
+      "previous_sha256": "1d0fbddfbfece9e83e4e738ad969e00a22dd437f6312f94157ed19a1658d828c",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_tim2.py",
+      "sha256": "f994d5fd3b9fecf53dc17c2b2d9a2cedbc7cafe9a73cbb23c1ee105f8078847f",
+      "previous_sha256": "f994d5fd3b9fecf53dc17c2b2d9a2cedbc7cafe9a73cbb23c1ee105f8078847f",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_tim2_ff1.py",
+      "sha256": "4a3c7571615d48fcc4b812ae1985c972782439c97bb5f8089598b512e3b2f6b3",
+      "previous_sha256": "4a3c7571615d48fcc4b812ae1985c972782439c97bb5f8089598b512e3b2f6b3",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_tim2_ff2.py",
+      "sha256": "16d7d00af92d5f02e6e7ddca1f14150bc6afdc6cb5f212ae07f1c73a1760c00c",
+      "previous_sha256": "16d7d00af92d5f02e6e7ddca1f14150bc6afdc6cb5f212ae07f1c73a1760c00c",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_tim2_ff3.py",
+      "sha256": "df701cf07cdc7cfef0e67a7b15be2c39794068a7642dea3631b9b8419a9b855c",
+      "previous_sha256": "df701cf07cdc7cfef0e67a7b15be2c39794068a7642dea3631b9b8419a9b855c",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_core/pz_xpr0.py",
+      "sha256": "65e1601db32556c388303c95c5533d587e4d70cb92ffd20e13de7b29da9496e1",
+      "previous_sha256": "65e1601db32556c388303c95c5533d587e4d70cb92ffd20e13de7b29da9496e1",
+      "status": "unchanged"
+    },
+    {
+      "path": "pz_export_cli.py",
+      "sha256": "c08f9ae9454a234db6020f42cfd7ee75161237eb82a89d6629c8ed046c6a43ac",
+      "previous_sha256": "e4e4e911b9801f9b9e065cb07e7c579a6fd81e0204055a9f0a1355c136a96b09",
+      "status": "modified"
+    },
+    {
+      "path": "pz_viewer.py",
+      "sha256": "c17345048f574051e7e7cff614697596f64719c634df82b2c2a092791774d85f",
+      "previous_sha256": "c17345048f574051e7e7cff614697596f64719c634df82b2c2a092791774d85f",
+      "status": "unchanged"
+    },
+    {
+      "path": "pzviewer.ico",
+      "sha256": "f372621397851ec682a643c5e4d693529abe2beda27795120a29ee8cc257a489",
+      "previous_sha256": "f372621397851ec682a643c5e4d693529abe2beda27795120a29ee8cc257a489",
+      "status": "unchanged"
+    },
+    {
+      "path": "run_viewer.bat",
+      "sha256": "3baeba32049b14bda65906b03910749e658679daff035ec96379e880aee4a4ec",
+      "previous_sha256": "3baeba32049b14bda65906b03910749e658679daff035ec96379e880aee4a4ec",
+      "status": "unchanged"
+    },
+    {
+      "path": "tests/ff1/conftest.py",
+      "sha256": "ae7e4269400f9cbe46b5cfaaabe77e239ffb60c58060d91eef79d18a52a6ff9c",
+      "previous_sha256": "ae7e4269400f9cbe46b5cfaaabe77e239ffb60c58060d91eef79d18a52a6ff9c",
+      "status": "unchanged"
+    },
+    {
+      "path": "tests/ff1/lighting_baseline.json",
+      "sha256": "daec0c61db169f2c8d7f560109affc6fc5dd2722b7ff3d4df25de69de8bb6128",
+      "status": "added"
+    },
+    {
+      "path": "tests/ff1/lighting_protected_sha256.json",
+      "sha256": "b431b3a9d78106725466b6373f2f9fce9405dbb560211978d5ea35cc349e177d",
+      "status": "added"
+    },
+    {
+      "path": "tests/ff1/original_regression.json",
+      "sha256": "7c01fd95fb5f464439633ca0c8f8b052ec060cf63586b0532236bc3acbd0d8e2",
+      "previous_sha256": "7c01fd95fb5f464439633ca0c8f8b052ec060cf63586b0532236bc3acbd0d8e2",
+      "status": "unchanged"
+    },
+    {
+      "path": "tests/ff1/protected_sha256.json",
+      "sha256": "bcf074142a011fb6096122485b687861b87e33b76705e2ec8529018036fbe0a6",
+      "previous_sha256": "bcf074142a011fb6096122485b687861b87e33b76705e2ec8529018036fbe0a6",
+      "status": "unchanged"
+    },
+    {
+      "path": "tests/ff1/test_color_and_pose.py",
+      "sha256": "8142d1ad724c035335557c53891c7b5f3cc01d3440dbd15731dcee7de8a6be70",
+      "previous_sha256": "8142d1ad724c035335557c53891c7b5f3cc01d3440dbd15731dcee7de8a6be70",
+      "status": "unchanged"
+    },
+    {
+      "path": "tests/ff1/test_integration.py",
+      "sha256": "1ee7afd9f05d43505cd1d49c1f17242f2abb9902bf2d12b84ffd1eae2b5c50b2",
+      "previous_sha256": "1ee7afd9f05d43505cd1d49c1f17242f2abb9902bf2d12b84ffd1eae2b5c50b2",
+      "status": "unchanged"
+    },
+    {
+      "path": "tests/ff1/test_lighting.py",
+      "sha256": "e1d0471e2cd1e8222e1de474908464081384c72920410b8377c11dc7c10c399f",
+      "status": "added"
+    },
+    {
+      "path": "tests/ff1/viewer_lighting_logic.cjs",
+      "sha256": "46cbf9e18bc7eb476a884934ecb0dc5cc877c8226b641474a7f96dbaa4abf5e9",
+      "status": "added"
+    },
+    {
+      "path": "tools/inspect_ff1.py",
+      "sha256": "754e145d99a9be1b0bc5e35ce9873b0a0bcfc9eef63b7dc7ee62951f3c1f5bb9",
+      "previous_sha256": "754e145d99a9be1b0bc5e35ce9873b0a0bcfc9eef63b7dc7ee62951f3c1f5bb9",
+      "status": "unchanged"
+    },
+    {
+      "path": "tools/inspect_ff1_lighting.py",
+      "sha256": "026ee910d23f8fa5ff17664c951288d248268176abf5a4890d7f880d0d4776e1",
+      "status": "added"
+    },
+    {
+      "path": "viewer/server.py",
+      "sha256": "497aace894a5dca672e19a04fdcb2652626e64e2158ef65a28efd7d48c2549bf",
+      "previous_sha256": "b0ee0c8e59e71e7bba488651fb3cd2951fea2100630cdc9f437840704a5841df",
+      "status": "modified"
+    },
+    {
+      "path": "viewer/static/app-icon.png",
+      "sha256": "413caa04c752213719a2eefbce6a116d864e236a08adb5c33d0fcbf1b8f6b0d1",
+      "previous_sha256": "413caa04c752213719a2eefbce6a116d864e236a08adb5c33d0fcbf1b8f6b0d1",
+      "status": "unchanged"
+    },
+    {
+      "path": "viewer/static/app.js",
+      "sha256": "eb20d4581b0afb983a89eab433559a9b7ca6fff48a1fe2fdbf9b29927de5cf66",
+      "previous_sha256": "6707a90473894262a0749b9456d04f3b65f24d8adeb820186cbda7f98ce6eb33",
+      "status": "modified"
+    },
+    {
+      "path": "viewer/static/index.html",
+      "sha256": "18fcd0b90e53e5017671390d0ff657fba8bf96e7d81e4f4cbdf604e89227be3a",
+      "previous_sha256": "78999d0eeef793b348b1359f75c065a16b5a7b9ad6ef3e1f1c21cca64da11442",
+      "status": "modified"
+    },
+    {
+      "path": "viewer/static/style.css",
+      "sha256": "075c5bd9dedbbf6fed50420873cb4322274d1d6753fb82ffcdc76628aacb3e6c",
+      "previous_sha256": "075c5bd9dedbbf6fed50420873cb4322274d1d6753fb82ffcdc76628aacb3e6c",
+      "status": "unchanged"
+    },
+    {
+      "path": "viewer/static/theme-ff1.png",
+      "sha256": "27e278077cc2b46a5f6046a9e7e575888623a9b90d542de2c760ae248144b4b0",
+      "previous_sha256": "27e278077cc2b46a5f6046a9e7e575888623a9b90d542de2c760ae248144b4b0",
+      "status": "unchanged"
+    },
+    {
+      "path": "viewer/static/theme-ff2.png",
+      "sha256": "d9c7ae99c48d9f625b32fa2a0f73b6e5b1849d85618dcefaed072a45bdf642e5",
+      "previous_sha256": "d9c7ae99c48d9f625b32fa2a0f73b6e5b1849d85618dcefaed072a45bdf642e5",
+      "status": "unchanged"
+    },
+    {
+      "path": "viewer/static/theme-ff2w.png",
+      "sha256": "97ce331961f72a9c9b98c373e7c505659d861544776c4beb21aa7d5447a39c65",
+      "previous_sha256": "97ce331961f72a9c9b98c373e7c505659d861544776c4beb21aa7d5447a39c65",
+      "status": "unchanged"
+    },
+    {
+      "path": "viewer/static/theme-ff3.png",
+      "sha256": "79488534432886634904f5b713d3fab5c688ce5795fcb9a89687ae3939d68bd0",
+      "previous_sha256": "79488534432886634904f5b713d3fab5c688ce5795fcb9a89687ae3939d68bd0",
+      "status": "unchanged"
+    }
+  ]
+}

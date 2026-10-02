@@ -1,0 +1,62 @@
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.0.2, pluggy-1.6.0 -- /opt/pyvenv/bin/python
+cachedir: .pytest_cache
+metadata: {'Python': '3.13.5', 'Platform': 'Linux-6.18.44-x86_64-with-glibc2.41', 'Packages': {'pytest': '9.0.2', 'pluggy': '1.6.0'}, 'Plugins': {'anyio': '4.13.0', 'ddtrace': '4.4.0', 'Faker': '40.1.2', 'asyncio': '1.3.0', 'cov': '7.0.0', 'json-report': '1.5.0', 'metadata': '3.1.1'}, 'PLATFORM': 'linux/amd64', 'CI': 'true'}
+rootdir: /mnt/data/ff1_work
+plugins: anyio-4.13.0, ddtrace-4.4.0, Faker-40.1.2, asyncio-1.3.0, cov-7.0.0, json-report-1.5.0, metadata-3.1.1
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 51 items
+
+tests/ff1/test_color_and_pose.py::test_original_colours_recovered[i000_play_camera1.sgd-2-1] PASSED [  1%]
+tests/ff1/test_color_and_pose.py::test_original_colours_recovered[f012_savepnt.sgd-3-1] PASSED [  3%]
+tests/ff1/test_color_and_pose.py::test_original_colours_recovered[r000_genkan.pk2-26-2] PASSED [  5%]
+tests/ff1/test_color_and_pose.py::test_monochrome_is_an_explicit_alternative[i000_play_camera1.sgd] PASSED [  7%]
+tests/ff1/test_color_and_pose.py::test_monochrome_is_an_explicit_alternative[f012_savepnt.sgd] PASSED [  9%]
+tests/ff1/test_color_and_pose.py::test_monochrome_is_an_explicit_alternative[r000_genkan.pk2] PASSED [ 11%]
+tests/ff1/test_color_and_pose.py::test_environment_geometry_unchanged[i000_play_camera1.sgd] PASSED [ 13%]
+tests/ff1/test_color_and_pose.py::test_environment_geometry_unchanged[f012_savepnt.sgd] PASSED [ 15%]
+tests/ff1/test_color_and_pose.py::test_environment_geometry_unchanged[r000_genkan.pk2] PASSED [ 17%]
+tests/ff1/test_color_and_pose.py::test_renamed_files_recognized_by_structure[i000_play_camera1.sgd] PASSED [ 19%]
+tests/ff1/test_color_and_pose.py::test_renamed_files_recognized_by_structure[f012_savepnt.sgd] PASSED [ 21%]
+tests/ff1/test_color_and_pose.py::test_uv_convention_does_not_depend_on_file_name PASSED [ 23%]
+tests/ff1/test_color_and_pose.py::test_room_merge_preserves_high_tex0 PASSED [ 25%]
+tests/ff1/test_color_and_pose.py::test_gif_direct_and_split_image[False] PASSED [ 27%]
+tests/ff1/test_color_and_pose.py::test_gif_direct_and_split_image[True] PASSED [ 29%]
+tests/ff1/test_color_and_pose.py::test_indexed_image_with_bare_palette_packet[19] PASSED [ 31%]
+tests/ff1/test_color_and_pose.py::test_indexed_image_with_bare_palette_packet[20] PASSED [ 33%]
+tests/ff1/test_color_and_pose.py::test_full_tex0_distinguishes_two_palettes_at_same_texture_address[19] PASSED [ 35%]
+tests/ff1/test_color_and_pose.py::test_full_tex0_distinguishes_two_palettes_at_same_texture_address[20] PASSED [ 37%]
+tests/ff1/test_color_and_pose.py::test_destination_x_is_not_source_x PASSED [ 39%]
+tests/ff1/test_color_and_pose.py::test_fake_texture_signature_inside_pixels_is_not_a_process_unit PASSED [ 41%]
+tests/ff1/test_color_and_pose.py::test_truncated_binary_reports_an_offset[0] PASSED [ 43%]
+tests/ff1/test_color_and_pose.py::test_truncated_binary_reports_an_offset[23] PASSED [ 45%]
+tests/ff1/test_color_and_pose.py::test_truncated_binary_reports_an_offset[27] PASSED [ 47%]
+tests/ff1/test_color_and_pose.py::test_truncated_binary_reports_an_offset[31] PASSED [ 49%]
+tests/ff1/test_color_and_pose.py::test_truncated_binary_reports_an_offset[47] PASSED [ 50%]
+tests/ff1/test_color_and_pose.py::test_truncated_binary_reports_an_offset[80] PASSED [ 52%]
+tests/ff1/test_color_and_pose.py::test_truncated_binary_reports_an_offset[128] PASSED [ 54%]
+tests/ff1/test_color_and_pose.py::test_empty_texture_stream_does_not_fabricate_black_images PASSED [ 56%]
+tests/ff1/test_color_and_pose.py::test_unknown_clut_layout_is_diagnosed_not_silently_guessed PASSED [ 58%]
+tests/ff1/test_color_and_pose.py::test_character_geometry_and_colour_images_unchanged PASSED [ 60%]
+tests/ff1/test_color_and_pose.py::test_all_character_bone_bases_are_proper_rotations PASSED [ 62%]
+tests/ff1/test_color_and_pose.py::test_coordinate_conversion_agrees_for_points_and_bones PASSED [ 64%]
+tests/ff1/test_color_and_pose.py::test_stored_arm_pose_precedes_parser_and_is_not_a_forced_t_pose PASSED [ 66%]
+tests/ff1/test_color_and_pose.py::test_ff2_stays_on_its_previous_decoder PASSED [ 68%]
+tests/ff1/test_color_and_pose.py::test_protected_sources_and_examples_unchanged PASSED [ 70%]
+tests/ff1/test_color_and_pose.py::test_mpk_character_uses_same_pose_fix_without_filename_exceptions PASSED [ 72%]
+tests/ff1/test_integration.py::test_real_http_load_glb_obj_and_texture_exports[i000_play_camera1.sgd-2] PASSED [ 74%]
+tests/ff1/test_integration.py::test_real_http_load_glb_obj_and_texture_exports[f012_savepnt.sgd-3] PASSED [ 76%]
+tests/ff1/test_integration.py::test_real_http_load_glb_obj_and_texture_exports[r000_genkan.pk2-26] PASSED [ 78%]
+tests/ff1/test_integration.py::test_real_http_load_glb_obj_and_texture_exports[m001_mafuyu.mdl-23] PASSED [ 80%]
+tests/ff1/test_integration.py::test_reselect_cached_asset_restores_export_state PASSED [ 82%]
+tests/ff1/test_integration.py::test_unknown_name_with_and_without_explicit_game[ff1] PASSED [ 84%]
+tests/ff1/test_integration.py::test_unknown_name_with_and_without_explicit_game[] PASSED [ 86%]
+tests/ff1/test_integration.py::test_explicit_other_game_is_not_overridden_by_ff1_hints[ff2] PASSED [ 88%]
+tests/ff1/test_integration.py::test_explicit_other_game_is_not_overridden_by_ff1_hints[ff3] PASSED [ 90%]
+tests/ff1/test_integration.py::test_cli_exports_colour_pngs_and_glb[i000_play_camera1.sgd-2] PASSED [ 92%]
+tests/ff1/test_integration.py::test_cli_exports_colour_pngs_and_glb[f012_savepnt.sgd-3] PASSED [ 94%]
+tests/ff1/test_integration.py::test_cli_exports_colour_pngs_and_glb[r000_genkan.pk2-26] PASSED [ 96%]
+tests/ff1/test_integration.py::test_cli_exports_colour_pngs_and_glb[m001_mafuyu.mdl-23] PASSED [ 98%]
+tests/ff1/test_integration.py::test_glb_joint_hierarchy_and_inverse_bind_matrices PASSED [100%]
+
+============================= 51 passed in 11.46s ==============================

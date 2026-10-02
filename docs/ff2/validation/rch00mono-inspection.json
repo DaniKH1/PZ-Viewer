@@ -1,0 +1,1131 @@
+{
+  "source": "rch00Mono.pk2",
+  "source_sha256": "69dfefa7ac093d858106e57f0aa873e4be62c342e4241482e4427087e0b5dff8",
+  "stats": {
+    "vertices": 12251,
+    "triangles": 8669,
+    "submeshes": 307,
+    "bones": 168,
+    "textures": 27
+  },
+  "diagnostics": {
+    "materials_mapped": 29,
+    "materials_total": 29,
+    "uv_min": -5.550780773162842,
+    "uv_max": 7.140625,
+    "position_min": -361.72100830078125,
+    "position_max": 1672.238037109375,
+    "position_values": 36753,
+    "texture_alpha": [
+      {
+        "texture_index": 0,
+        "width": 64,
+        "height": 64,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_ana",
+            "tbp0": 11328,
+            "psm": 19,
+            "cbp": 14012,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 1,
+        "width": 256,
+        "height": 128,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_ana",
+            "tbp0": 11200,
+            "psm": 19,
+            "cbp": 14008,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 2,
+        "width": 256,
+        "height": 128,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_tor",
+            "tbp0": 12280,
+            "psm": 19,
+            "cbp": 14062,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 3,
+        "width": 256,
+        "height": 256,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_gak",
+            "tbp0": 11344,
+            "psm": 19,
+            "cbp": 14016,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 4,
+        "width": 128,
+        "height": 128,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_tor",
+            "tbp0": 12408,
+            "psm": 19,
+            "cbp": 14066,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 5,
+        "width": 128,
+        "height": 128,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_isi",
+            "tbp0": 11600,
+            "psm": 19,
+            "cbp": 14024,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 6,
+        "width": 256,
+        "height": 64,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_tor",
+            "tbp0": 12536,
+            "psm": 19,
+            "cbp": 14074,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 7,
+        "width": 256,
+        "height": 64,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_tor",
+            "tbp0": 12472,
+            "psm": 19,
+            "cbp": 14070,
+            "csm": 0,
+            "csa": 0
+          },
+          {
+            "material": "ch00_sg_tor",
+            "tbp0": 12472,
+            "psm": 19,
+            "cbp": 14070,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 8,
+        "width": 32,
+        "height": 16,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_naw",
+            "tbp0": 12278,
+            "psm": 19,
+            "cbp": 14058,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 9,
+        "width": 256,
+        "height": 128,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_iwa",
+            "tbp0": 11920,
+            "psm": 19,
+            "cbp": 14036,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 10,
+        "width": 256,
+        "height": 128,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_iwa",
+            "tbp0": 11664,
+            "psm": 19,
+            "cbp": 14028,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 11,
+        "width": 256,
+        "height": 128,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_iwa",
+            "tbp0": 11792,
+            "psm": 19,
+            "cbp": 14032,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 12,
+        "width": 256,
+        "height": 256,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_yuk",
+            "tbp0": 13752,
+            "psm": 19,
+            "cbp": 14106,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 13,
+        "width": 256,
+        "height": 256,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_yuk",
+            "tbp0": 13240,
+            "psm": 19,
+            "cbp": 14094,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 14,
+        "width": 256,
+        "height": 256,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_yuk",
+            "tbp0": 13496,
+            "psm": 19,
+            "cbp": 14102,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 15,
+        "width": 256,
+        "height": 256,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_yuk",
+            "tbp0": 12984,
+            "psm": 19,
+            "cbp": 14086,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 16,
+        "width": 256,
+        "height": 256,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_tuu",
+            "tbp0": 12728,
+            "psm": 19,
+            "cbp": 14082,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 17,
+        "width": 256,
+        "height": 128,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_tor",
+            "tbp0": 12600,
+            "psm": 19,
+            "cbp": 14078,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 18,
+        "width": 256,
+        "height": 64,
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "has_alpha": true,
+        "materials": [
+          {
+            "material": "ch00_sg_kow",
+            "tbp0": 12214,
+            "psm": 19,
+            "cbp": 14054,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 19,
+        "width": 256,
+        "height": 128,
+        "alpha_min": 255,
+        "alpha_max": 255,
+        "has_alpha": false,
+        "materials": [
+          {
+            "material": "ch00_sg_kai",
+            "tbp0": 12086,
+            "psm": 19,
+            "cbp": 14050,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 20,
+        "width": 256,
+        "height": 256,
+        "alpha_min": 2,
+        "alpha_max": 250,
+        "has_alpha": true,
+        "materials": [
+          {
+            "material": "ch00_sg_yuk",
+            "tbp0": 12984,
+            "psm": 19,
+            "cbp": 14090,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 21,
+        "width": 256,
+        "height": 256,
+        "alpha_min": 0,
+        "alpha_max": 252,
+        "has_alpha": true,
+        "materials": [
+          {
+            "material": "ch00_sg_gak",
+            "tbp0": 11344,
+            "psm": 19,
+            "cbp": 14020,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 22,
+        "width": 64,
+        "height": 64,
+        "alpha_min": 0,
+        "alpha_max": 255,
+        "has_alpha": true,
+        "materials": [
+          {
+            "material": "ch00_sg_kag",
+            "tbp0": 12064,
+            "psm": 19,
+            "cbp": 14044,
+            "csm": 0,
+            "csa": 0
+          },
+          {
+            "material": "ch00_sg_kag",
+            "tbp0": 12064,
+            "psm": 19,
+            "cbp": 14044,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 23,
+        "width": 32,
+        "height": 32,
+        "alpha_min": 0,
+        "alpha_max": 148,
+        "has_alpha": true,
+        "materials": [
+          {
+            "material": "ch00_sg_kag",
+            "tbp0": 12084,
+            "psm": 20,
+            "cbp": 14049,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 24,
+        "width": 256,
+        "height": 256,
+        "alpha_min": 2,
+        "alpha_max": 250,
+        "has_alpha": true,
+        "materials": [
+          {
+            "material": "ch00_sg_yuk",
+            "tbp0": 13240,
+            "psm": 19,
+            "cbp": 14098,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 25,
+        "width": 64,
+        "height": 32,
+        "alpha_min": 2,
+        "alpha_max": 194,
+        "has_alpha": true,
+        "materials": [
+          {
+            "material": "ch00_sg_kag",
+            "tbp0": 12080,
+            "psm": 20,
+            "cbp": 14048,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      },
+      {
+        "texture_index": 26,
+        "width": 64,
+        "height": 64,
+        "alpha_min": 0,
+        "alpha_max": 254,
+        "has_alpha": true,
+        "materials": [
+          {
+            "material": "ch00_sg_iwa",
+            "tbp0": 12048,
+            "psm": 19,
+            "cbp": 14040,
+            "csm": 0,
+            "csa": 0
+          }
+        ]
+      }
+    ],
+    "skeleton": {
+      "bone_count": 168,
+      "roots": [
+        0
+      ],
+      "invalid_parents": [],
+      "self_parents": [],
+      "non_degenerate_matrices": 168,
+      "weighted_meshes": 307
+    },
+    "ff2_vertex_colors": {
+      "format": "ff2_stored_gs_vertex_colors",
+      "status": "stored_prelight",
+      "meshes_decoded": 307,
+      "vertices_decoded": 12251,
+      "strips_decoded": 1791,
+      "zero_vertices": 3726,
+      "subunit_vertices": 251,
+      "overbright_vertices": 767,
+      "repeat_markers": 0,
+      "rgb_min": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "rgb_max": [
+        255.0,
+        255.0,
+        255.0
+      ],
+      "normalization": "GS MODULATE RGB / 128 (no per-vertex scale guessing)",
+      "warnings": []
+    },
+    "texture_debug": {
+      "ff2_headerless_gs": [
+        {
+          "decoder": "ff2_structured_tri2",
+          "palette_mode": "colour",
+          "detected_uploads": [
+            {
+              "entry_index": 0,
+              "block": 0,
+              "block_offset": 43504,
+              "category": 10,
+              "tri2_index": 0,
+              "image_offset": 43616,
+              "tbp0": 11200,
+              "tbw": 1,
+              "psm": 0,
+              "dsax": 0,
+              "dsay": 0,
+              "width": 64,
+              "height": 2016,
+              "payload_bytes": 516096
+            },
+            {
+              "entry_index": 0,
+              "block": 0,
+              "block_offset": 43504,
+              "category": 10,
+              "tri2_index": 1,
+              "image_offset": 559824,
+              "tbp0": 13216,
+              "tbw": 1,
+              "psm": 0,
+              "dsax": 0,
+              "dsay": 0,
+              "width": 64,
+              "height": 896,
+              "payload_bytes": 229376
+            }
+          ],
+          "skipped_monochrome_blocks": [
+            {
+              "entry_index": 0,
+              "block_offset": 794752,
+              "category": 13,
+              "reason": "alternative monochrome CLUTs"
+            }
+          ],
+          "decoded_tbp0": [
+            11200,
+            11328,
+            11344,
+            11600,
+            11664,
+            11792,
+            11920,
+            12048,
+            12064,
+            12080,
+            12084,
+            12086,
+            12214,
+            12278,
+            12280,
+            12408,
+            12472,
+            12536,
+            12600,
+            12728,
+            12984,
+            13240,
+            13496,
+            13752
+          ],
+          "decoded_tex0": [
+            "0x2006d705e1312bc0",
+            "0x2006d7859930ac40",
+            "0x2006d80621312c50",
+            "0x2006d88621312c50",
+            "0x2006d905dd30ad50",
+            "0x2006d985e1312d90",
+            "0x2006da05e1312e10",
+            "0x2006da85e1312e90",
+            "0x2006db059930af10",
+            "0x2006db859930af20",
+            "0x2006dc055940af30",
+            "0x2006dc255540af34",
+            "0x2006dc45e1312f36",
+            "0x2006dcc5a1312fb6",
+            "0x2006dd451530aff6",
+            "0x2006ddc5e1312ff8",
+            "0x2006de45dd30b078",
+            "0x2006dec5a13130b8",
+            "0x2006df45a13130f8",
+            "0x2006dfc5e1313138",
+            "0x2006e046213131b8",
+            "0x2006e0c6213132b8",
+            "0x2006e146213132b8",
+            "0x2006e1c6213133b8",
+            "0x2006e246213133b8",
+            "0x2006e2c6213134b8",
+            "0x2006e346213135b8"
+          ],
+          "warnings": []
+        }
+      ]
+    },
+    "foliage_meshes": [
+      {
+        "mesh": "mesh_b112_t0x12",
+        "material_index": 2,
+        "material_name": "ch00_sg_tor",
+        "tbp0": 12280,
+        "tex0_low": 3778097144,
+        "texture_index": 2,
+        "texture_dimensions": [
+          256,
+          128
+        ],
+        "vertex_count": 30,
+        "triangle_count": 26,
+        "uv_min": 0.0020000000949949026,
+        "uv_max": 0.9980000257492065,
+        "uv_samples": [
+          [
+            0.0020000000949949026,
+            0.9959999998100102
+          ],
+          [
+            0.0020000000949949026,
+            0.828125
+          ],
+          [
+            0.9980000257492065,
+            0.9959999998100102
+          ],
+          [
+            0.0020000000949949026,
+            0.828125
+          ],
+          [
+            0.9980000257492065,
+            0.828125
+          ],
+          [
+            0.0020000000949949026,
+            0.6640630066394806
+          ]
+        ],
+        "named_uv_flip_applied": true
+      },
+      {
+        "mesh": "mesh_b112_t0x12",
+        "material_index": 4,
+        "material_name": "ch00_sg_tor",
+        "tbp0": 12408,
+        "tex0_low": 3710955640,
+        "texture_index": 4,
+        "texture_dimensions": [
+          128,
+          128
+        ],
+        "vertex_count": 30,
+        "triangle_count": 26,
+        "uv_min": 0.001999974250793457,
+        "uv_max": 0.9980000257492065,
+        "uv_samples": [
+          [
+            0.0020000000949949026,
+            0.9979999999050051
+          ],
+          [
+            0.1640630066394806,
+            0.9979999999050051
+          ],
+          [
+            0.0020000000949949026,
+            0.001999974250793457
+          ],
+          [
+            0.1640630066394806,
+            0.9979999999050051
+          ],
+          [
+            0.1640630066394806,
+            0.001999974250793457
+          ],
+          [
+            0.3359380066394806,
+            0.9979999999050051
+          ]
+        ],
+        "named_uv_flip_applied": true
+      }
+    ],
+    "foliage_uv_corrections": [
+      "mesh_b112_t0x12",
+      "mesh_b112_t0x12"
+    ],
+    "pk2_entries": 1,
+    "pk2_parsed": 1,
+    "pk2_skipped": 0,
+    "pk2_skipped_entries": [],
+    "load_ms": 1615.1,
+    "cache": "miss"
+  },
+  "vertex_gains_min": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "vertex_gains_max": [
+    1.9921875,
+    1.9921875,
+    1.9921875
+  ],
+  "vertex_gains_mean": [
+    0.2449708328161752,
+    0.2449708328161752,
+    0.2449708328161752
+  ],
+  "distinct_rgb_6decimals": 4081,
+  "textures": [
+    {
+      "index": 0,
+      "size": [
+        64,
+        64
+      ],
+      "rgba_sha256": "62fb561c59d0cea247fc588f3311ee665375f35d8675b186e2792cb7dfcff88c",
+      "chromatic_pixels": 0,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 1,
+      "size": [
+        256,
+        128
+      ],
+      "rgba_sha256": "6d35ecec10b133aef1875b8ae2bd62755ec4963096a142efb33b5b55abb5a541",
+      "chromatic_pixels": 28276,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 2,
+      "size": [
+        256,
+        128
+      ],
+      "rgba_sha256": "a4f8862b49fde3e11a60d6adc2954853c8bf21ca6f6823fc5da70c9433d92837",
+      "chromatic_pixels": 32768,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 3,
+      "size": [
+        256,
+        256
+      ],
+      "rgba_sha256": "a7c66991ed09cac9e080cec0a48cdb08b511c5b49400267d6b81143cc555a579",
+      "chromatic_pixels": 52884,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 4,
+      "size": [
+        128,
+        128
+      ],
+      "rgba_sha256": "e9a5514cb7e490c1a1751ce8b3ad7dd85027130518fcf3cce2ab56607db94ebd",
+      "chromatic_pixels": 16384,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 5,
+      "size": [
+        128,
+        128
+      ],
+      "rgba_sha256": "513e7b59a667facf4bedc4bbfcf9b2e05d40733baf807698b9d92ed9d55997cd",
+      "chromatic_pixels": 12699,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 6,
+      "size": [
+        256,
+        64
+      ],
+      "rgba_sha256": "a3561415f7bcc95081044d6aa516d15b516c575418cbfda394f7524581d60536",
+      "chromatic_pixels": 16272,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 7,
+      "size": [
+        256,
+        64
+      ],
+      "rgba_sha256": "04b34e322d323604cedbc9bcc30dd71c8362ea326b8533a40968889813a1461f",
+      "chromatic_pixels": 16362,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 8,
+      "size": [
+        32,
+        16
+      ],
+      "rgba_sha256": "3af20cb8a2a607d5ee9c34f6526ccf514c896728af8f55dbe7672739b5fa6d2f",
+      "chromatic_pixels": 496,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 9,
+      "size": [
+        256,
+        128
+      ],
+      "rgba_sha256": "9af2400ea8ac5e61087298f96f20fe556da367a24dc94046707b1edbe4a118f1",
+      "chromatic_pixels": 29509,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 10,
+      "size": [
+        256,
+        128
+      ],
+      "rgba_sha256": "a1a57215fd8dd95c7a8fa333b98aa1a251f8a6952a283c535bdf26c21cf9562e",
+      "chromatic_pixels": 27634,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 11,
+      "size": [
+        256,
+        128
+      ],
+      "rgba_sha256": "5be376b9c2e7b8c93b57b702f1e0c2c503ef973d49d51e33be946cecfdf6fbad",
+      "chromatic_pixels": 27001,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 12,
+      "size": [
+        256,
+        256
+      ],
+      "rgba_sha256": "c526e52bbbe3c6103e690bc8fdcc940658116ef015e048279ad7a22438f1ef0a",
+      "chromatic_pixels": 38492,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 13,
+      "size": [
+        256,
+        256
+      ],
+      "rgba_sha256": "e8c1d6207b83d6eb03594610c0cfcdb7b394cabd529d17bcf87dc7b060bb1355",
+      "chromatic_pixels": 48175,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 14,
+      "size": [
+        256,
+        256
+      ],
+      "rgba_sha256": "08746e8bb6126df14a81e2e5c6186648eeab82405cb176221a2db95f758d5837",
+      "chromatic_pixels": 41832,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 15,
+      "size": [
+        256,
+        256
+      ],
+      "rgba_sha256": "de640cd6d041dde3f21a7a7227caa8acef839c731548171432b9b8b5febb523e",
+      "chromatic_pixels": 54450,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 16,
+      "size": [
+        256,
+        256
+      ],
+      "rgba_sha256": "7976d42bb713ebe1137035176d6934241b7c9ea88174c850dc25d1645886678b",
+      "chromatic_pixels": 47172,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 17,
+      "size": [
+        256,
+        128
+      ],
+      "rgba_sha256": "10f6d8c5fc4f2bf16d8d99616c7074c29d9d2f3be6f3654197c194e37f7d0439",
+      "chromatic_pixels": 32768,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 18,
+      "size": [
+        256,
+        64
+      ],
+      "rgba_sha256": "361cab698bb2114a7945465b816f0406cfbcaa7bd2604469a7d4fbb8314a70cc",
+      "chromatic_pixels": 16384,
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "index": 19,
+      "size": [
+        256,
+        128
+      ],
+      "rgba_sha256": "05555639406631ed9baaa193dbf671e9102a0249dda1023e68a7184dba62b35a",
+      "chromatic_pixels": 21741,
+      "alpha_range": [
+        255,
+        255
+      ]
+    },
+    {
+      "index": 20,
+      "size": [
+        256,
+        256
+      ],
+      "rgba_sha256": "32ddd64b1f45fe0a22c9bc22a636877a6b3c8e86bab8288e74bdf0428bc9699a",
+      "chromatic_pixels": 54450,
+      "alpha_range": [
+        2,
+        250
+      ]
+    },
+    {
+      "index": 21,
+      "size": [
+        256,
+        256
+      ],
+      "rgba_sha256": "13f90f88db8bacfc9cc8dd27c7c4106bab13cc38fa3416fdc004df1dc6feba10",
+      "chromatic_pixels": 52884,
+      "alpha_range": [
+        0,
+        252
+      ]
+    },
+    {
+      "index": 22,
+      "size": [
+        64,
+        64
+      ],
+      "rgba_sha256": "3914573c56a26675e14470215f6a25a6c598d94f23e18a2fef087049545185a8",
+      "chromatic_pixels": 3433,
+      "alpha_range": [
+        0,
+        255
+      ]
+    },
+    {
+      "index": 23,
+      "size": [
+        32,
+        32
+      ],
+      "rgba_sha256": "49786ae56d928e04bbc1ecdf9c4699cc78019d48bd02c20c40399899f142a548",
+      "chromatic_pixels": 0,
+      "alpha_range": [
+        0,
+        148
+      ]
+    },
+    {
+      "index": 24,
+      "size": [
+        256,
+        256
+      ],
+      "rgba_sha256": "2da2a7c230374af9b534c14ff4bf56a5dc6eeeed6a3d26b8a53801f6107b8057",
+      "chromatic_pixels": 48175,
+      "alpha_range": [
+        2,
+        250
+      ]
+    },
+    {
+      "index": 25,
+      "size": [
+        64,
+        32
+      ],
+      "rgba_sha256": "299d92b60a3ca12ac4fc35e0a98085b7e97c4660a3f6d291584d51d5642bee2d",
+      "chromatic_pixels": 0,
+      "alpha_range": [
+        2,
+        194
+      ]
+    },
+    {
+      "index": 26,
+      "size": [
+        64,
+        64
+      ],
+      "rgba_sha256": "fabcafd023b05f8b9a77f6abe77ee5563c7c1f84f344054645449906d42b110f",
+      "chromatic_pixels": 3978,
+      "alpha_range": [
+        0,
+        254
+      ]
+    }
+  ],
+  "renders": []
+}

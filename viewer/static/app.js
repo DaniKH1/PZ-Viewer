@@ -119,6 +119,7 @@ class PZViewerApp {
     this.container = document.getElementById('viewport');
     this.currentModelData = null;
     this.textures = {};
+    this.selectedBrowserPath = '';
 
     this.shadingMode = 'textured';
     // Vertex colours live outside the shading picker now: they are a modifier on
@@ -592,7 +593,7 @@ initThemePicker() {
   initEventListeners() {
     // The two read-only dialogs. Same wiring as the batch one: open, close by
     // button, by the backdrop, or by Escape (handled with the other shortcuts).
-    [['btn-credits', 'credits-modal', ['btn-credits-close', 'btn-credits-done']],
+    [['btn-credits', 'credits-modal', ['btn-credits-done']],
      ['btn-howto', 'howto-modal', ['btn-howto-close', 'btn-howto-done']]
     ].forEach(([openId, modalId, closeIds]) => {
       const dialog = document.getElementById(modalId);
@@ -616,7 +617,19 @@ initThemePicker() {
     });
 
     window.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' ||
+          e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) return;
+      if (e.code === 'ArrowDown' || e.code === 'ArrowUp') {
+        e.preventDefault();
+        this.moveFileTreeSelection(e.code === 'ArrowDown' ? 1 : -1);
+        return;
+      }
+      if (e.code === 'Enter' &&
+          document.querySelector('#file-list .file-item.selected')) {
+        e.preventDefault();
+        this.activateFileTreeSelection();
+        return;
+      }
       // Every viewport button carries its shortcut in brackets, and this is the
       // one place that has to keep up with them.
       switch (e.code) {
@@ -1004,10 +1017,12 @@ initThemePicker() {
       if (data.parent_dir && data.parent_dir !== data.current_dir) {
         const upRow = document.createElement('div');
         upRow.className = 'file-item dir';
+        upRow.dataset.path = data.parent_dir;
         upRow.style.fontWeight = 'bold';
         upRow.style.color = '#38bdf8';
         upRow.innerHTML = '<span>📁</span> <span>.. (Parent Directory)</span>';
         upRow.addEventListener('click', () => {
+          this.setFileTreeSelection(upRow);
           this.browseDir(data.parent_dir, game);
         });
         fileListEl.appendChild(upRow);
@@ -1017,6 +1032,10 @@ initThemePicker() {
         data.items.forEach(item => {
           const row = document.createElement('div');
           row.className = 'file-item ' + (item.is_dir ? 'dir' : 'file-' + item.type);
+          row.dataset.path = item.path;
+          if (item.path === this.selectedBrowserPath) {
+            row.classList.add('selected');
+          }
           row.dataset.search = (item.name + ' ' + item.type).toLowerCase();
           const iconMap = { sgd_pack: '🧩', mdl: '🧍', mpk: '📦', sgd: '📄', cld: '🛡️', tm2: '🖼️', tim2: '🖼️', png: '🖼️', pk2: '📦', pk4: '📦' };
           const icon = item.is_dir ? '📁' : (iconMap[item.type] || '📄');
@@ -1025,7 +1044,10 @@ initThemePicker() {
             item.name + '</span><span class="file-meta">' + size + '</span>';
 
           row.addEventListener('click', () => {
-            if (item.is_dir) {
+            this.setFileTreeSelection(row);
+            if (item.load_path) {
+              this.loadFile(item.load_path);
+            } else if (item.is_dir) {
               this.browseDir(item.path, game);
             } else {
               this.loadFile(item.path);
@@ -1042,6 +1064,8 @@ initThemePicker() {
         fileListEl.innerHTML = '';
         fileListEl.appendChild(this.buildEmptyFolderNotice(data, game));
       }
+      const fileFilter = document.getElementById('file-filter');
+      if (fileFilter) this.filterBrowserItems(fileFilter.value);
     } catch (e) {
       this.renderSavedRoots();
       const error = document.createElement('div');
@@ -1068,9 +1092,13 @@ initThemePicker() {
     if (data.parent_dir && data.parent_dir !== data.current_dir) {
       const upRow = document.createElement('div');
       upRow.className = 'file-item dir';
+      upRow.dataset.path = data.parent_dir;
       upRow.style.fontWeight = 'bold';
       upRow.innerHTML = '<span>📁</span> <span>... (Parent Folder)</span>';
-      upRow.addEventListener('click', () => this.browseDir(data.parent_dir, game));
+      upRow.addEventListener('click', () => {
+        this.setFileTreeSelection(upRow);
+        this.browseDir(data.parent_dir, game);
+      });
       notice.appendChild(upRow);
     }
 
@@ -1081,11 +1109,46 @@ initThemePicker() {
     return notice;
   }
 
+  setFileTreeSelection(row) {
+    if (!row || !row.dataset.path) return;
+    this.selectedBrowserPath = row.dataset.path;
+    const fileList = document.getElementById('file-list');
+    if (fileList && document.activeElement !== fileList) {
+      fileList.focus({ preventScroll: true });
+    }
+    document.querySelectorAll('#file-list .file-item.selected').forEach((selectedRow) => {
+      selectedRow.classList.remove('selected');
+    });
+    row.classList.add('selected');
+  }
+
+  moveFileTreeSelection(direction) {
+    const rows = Array.from(document.querySelectorAll(
+      '#file-list .file-item:not([hidden])'
+    ));
+    if (!rows.length) return;
+    const selectedIndex = rows.findIndex((row) => row.classList.contains('selected'));
+    const nextIndex = selectedIndex < 0
+      ? (direction > 0 ? 0 : rows.length - 1)
+      : Math.max(0, Math.min(rows.length - 1, selectedIndex + direction));
+    this.setFileTreeSelection(rows[nextIndex]);
+    rows[nextIndex].scrollIntoView({ block: 'nearest' });
+  }
+
+  activateFileTreeSelection() {
+    const selected = document.querySelector('#file-list .file-item.selected');
+    if (selected) selected.click();
+  }
+
   filterBrowserItems(query) {
     const needle = query.trim().toLowerCase();
     document.querySelectorAll('#file-list .file-item').forEach(row => {
       row.hidden = !!needle && !(row.dataset.search || '').includes(needle);
     });
+    if (!document.querySelector('#file-list .file-item.selected:not([hidden])')) {
+      const firstVisible = document.querySelector('#file-list .file-item:not([hidden])');
+      if (firstVisible) this.setFileTreeSelection(firstVisible);
+    }
   }
 
   formatFileSize(bytes) {
@@ -1221,9 +1284,12 @@ initThemePicker() {
 
       // Shading defaults to textured for all model types (rooms, characters, props)
       this.shadingMode = 'textured';
-      // A new asset starts without vertex colours, or the previous one's toggle
-      // would follow the user into a model that has no colours to show.
-      this.vertexColorsOn = false;
+      // Baked FF1 Xbox room lighting is meaningful on textured surfaces, so
+      // show it automatically. Other assets start without vertex colours.
+      const roomLighting = (((data.diagnostics || {}).parser || {}).ff1_lighting || {});
+      this.vertexColorsOn =
+        roomLighting.format === 'ff1_xbox_static_vertex_lighting' &&
+        roomLighting.status === 'baked';
 
       this.buildGPUScene(data);
       // After the scene, not before: the panel binds each row to the objects that
@@ -1268,28 +1334,42 @@ initThemePicker() {
    * need genuine blending or they render as solid blocks on the floor. Forcing
    * rooms opaque was a wrong guess and it is what made those shadows opaque.
    */
-  getTextureAlphaSettings(map, isRoomAsset = false) {
+  getTextureAlphaSettings(map, isRoomAsset = false, keepPartialAlphaDepth = false) {
     const userData = map && map.userData ? map.userData : {};
     const alphaMin = Number.isFinite(userData.alphaMin) ? userData.alphaMin : 255;
     const alphaMax = Number.isFinite(userData.alphaMax) ? userData.alphaMax : 255;
+    const hasPartialAlpha = !!userData.alphaHasPartial;
     const opaque = !userData.hasAlpha || alphaMin >= 255;
 
     if (opaque) {
       // Pass 1: fully opaque surface, no test and no blending.
       return { transparent: false, alphaTest: 0, depthWrite: true };
     }
-    if (alphaMax >= 255) {
+    if (alphaMax >= 255 && !(keepPartialAlphaDepth && hasPartialAlpha)) {
       // Pass 2: binary cutout (lace, hair edges). Discard instead of blending
       // and keep depth writes, which is what makes the cutout read clean.
       return { transparent: false, alphaTest: 0.5, depthWrite: true };
     }
-    // Pass 3: genuinely soft mask, so blend. depthWrite stays off here because
-    // blended surfaces must not occlude what is drawn after them.
+    if (keepPartialAlphaDepth && hasPartialAlpha) {
+      // FF2 Wii characters use many intersecting hair, lash, and lace cards.
+      // Blend their fractional coverage, but keep depth writes on so nearer
+      // cards occlude farther cards per fragment instead of showing sorting
+      // seams or the body through overlapping layers.
+      return { transparent: true, alphaTest: 0.01, depthWrite: true };
+    }
+    // Pass 3: genuinely soft masks need blending without occluding later
+    // transparent surfaces.
     return { transparent: true, alphaTest: 0.2, depthWrite: false };
   }
 
   buildGPUScene(data) {
     const isRoomAsset = data.model_type === 'room' || data.type === 'room';
+    const parserDiagnostics = data.diagnostics && data.diagnostics.parser;
+    const isFF2WCharacter = !!(
+      (data.model_type === 'character' || data.type === 'character') &&
+      parserDiagnostics &&
+      parserDiagnostics.container === 'pk3'
+    );
     const textureFlipY = data.uvs_flipped ? false : true;
     // FF2 Wii ships small atlases that get magnified over whole surfaces;
     // nearest sampling turns them into hard texel blocks. The TIM2 games keep
@@ -1346,6 +1426,7 @@ initThemePicker() {
             hasAlpha: !!tex.has_alpha,
             alphaMin: Number.isFinite(tex.alpha_min) ? tex.alpha_min : 255,
             alphaMax: Number.isFinite(tex.alpha_max) ? tex.alpha_max : 255,
+            alphaHasPartial: !!tex.alpha_has_partial,
             sourceTextureIndex: idx
           };
           threeTex.needsUpdate = true;
@@ -1428,7 +1509,7 @@ initThemePicker() {
             // a recovered texture by them makes the whole room black.
             vertexColors: this.vertexColorsOn && hasColors,
             side: meshSide,
-            ...this.getTextureAlphaSettings(tex, isRoomAsset),
+            ...this.getTextureAlphaSettings(tex, isRoomAsset, isFF2WCharacter),
             opacity: 1,
             ...(MaterialClass === THREE.MeshStandardMaterial ? {
               roughness: 0.82,
@@ -1680,6 +1761,16 @@ initThemePicker() {
       const ud = child.userData;
       const isRoom = this.currentModelData &&
         (this.currentModelData.model_type === 'room' || this.currentModelData.type === 'room');
+      const parserDiagnostics = this.currentModelData &&
+        this.currentModelData.diagnostics &&
+        this.currentModelData.diagnostics.parser;
+      const isFF2WCharacter = !!(
+        this.currentModelData &&
+        (this.currentModelData.model_type === 'character' ||
+         this.currentModelData.type === 'character') &&
+        parserDiagnostics &&
+        parserDiagnostics.container === 'pk3'
+      );
       const map = ud.hasTexture ? (child.material.map || ud.originalMat.map) : null;
       // Vertex colours are a modifier on the textured looks, not a mode of their
       // own, so the two shading buttons keep their meaning. Texture-less room
@@ -1722,7 +1813,7 @@ initThemePicker() {
             color: 0xffffff,
             vertexColors: useVertexColors,
             side: THREE.FrontSide,
-            ...this.getTextureAlphaSettings(map, isRoom),
+            ...this.getTextureAlphaSettings(map, isRoom, isFF2WCharacter),
             ...(TexturedMaterial === THREE.MeshStandardMaterial ? {
               roughness: 0.82,
               metalness: 0.08

@@ -20,53 +20,71 @@ from urllib.parse import urlparse, parse_qs
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PIL import Image
-from pz_core.pz_pk2 import iter_embedded_tim2, unpack_pk2, unpack_room_pk2
-from pz_core.pz_pk2_ff2 import (
+from pz_core.common.pz_pk2 import iter_embedded_tim2, unpack_pk2, unpack_room_pk2
+from pz_core.ff2.pz_pk2_ff2 import (
     iter_embedded_tim2 as iter_embedded_tim2_ff2,
     reconstruct_sgd_textures as reconstruct_sgd_textures_ff2,
     unpack_pk2 as unpack_pk2_ff2,
 )
-from pz_core.pz_pk4 import (
+from pz_core.ff3.pz_pk4 import (
     flip_uvs_vertical,
     iter_pk4_entries,
     parse_pk4_model,
 )
-from pz_core.pz_sgd_ff1 import (
+from pz_core.ff1.pz_sgd_ff1 import (
     is_ff1_sgd,
     merge_sgd_models,
     parse_sgd as parse_sgd_ff1,
 )
-from pz_core.pz_sgd_ff3 import merge_sgd_models as merge_sgd_ff3, parse_sgd as parse_sgd_ff3
-from pz_core.pz_sgd_ff2 import merge_sgd_models as merge_sgd_ff2, parse_sgd as parse_sgd_ff2
-from pz_core.pz_mdl_ff1 import FF1MDLError, parse_ff1_mdl
-from pz_core.pz_mpx_ff1x import XboxMPXError, parse_xbox_asset
-from pz_core.pz_xpr0 import XPR0Error
-from pz_core.pz_export_xbox import (
+from pz_core.ff1.pz_lighting_ff1 import (
+    apply_ff1_xbox_room_lighting,
+    read_lit_sidecar,
+)
+from pz_core.ff3.pz_sgd_ff3 import merge_sgd_models as merge_sgd_ff3, parse_sgd as parse_sgd_ff3
+from pz_core.ff2.pz_sgd_ff2 import merge_sgd_models as merge_sgd_ff2, parse_sgd as parse_sgd_ff2
+from pz_core.ff1.pz_mdl_ff1 import FF1MDLError, parse_ff1_mdl
+from pz_core.ff2.pz_mdl_ff2 import FF2MDLError, parse_ff2_mdl
+from pz_core.ff1x.pz_mpx_ff1x import XboxMPXError, parse_xbox_asset
+from pz_core.ff1x.pz_pkx_ff1x import PKXError, parse_pkx as parse_ff1x_pkx
+from pz_core.ff1x.pz_xpr0 import XPR0Error
+from pz_core.export.pz_export_xbox import (
     export_obj as export_xbox_aware_obj,
     export_glb as export_xbox_aware_glb,
 )
-from pz_core.pz_mdlb_ff2w import (
+from pz_core.ff2w.pz_mdlb_ff2w import (
     FF2WError,
     parse_ff2w_model,
     parse_ff2w_textures,
 )
-from pz_core.pz_tim2_ff3 import decode_tim2, render_tim2_clut_variation
-from pz_core.pz_tim2_ff1 import reconstruct_sgd_textures
-from pz_core.pz_tim2_ff2 import decode_tim2 as decode_tim2_ff2
-from pz_core.pz_collision import (
+from pz_core.ff3.pz_tim2_ff3 import decode_tim2, render_tim2_clut_variation
+from pz_core.ff1.pz_tim2_ff1 import reconstruct_sgd_textures
+from pz_core.ff2.pz_tim2_ff2 import decode_tim2 as decode_tim2_ff2
+from pz_core.common.pz_collision import (
     parse_room_collision_from_map,
     parse_all_rooms_collision_from_map,
     collision_to_sgd_model,
     parse_cld,
     parse_cld_folder
 )
-from pz_core.pz_export import export_glb, export_obj, export_dae, export_fbx, export_textures_png
+from pz_core.export.pz_export import export_glb, export_obj, export_dae, export_fbx, export_textures_png
 
+# Where the user's own files live.
+#
+# Run from source that is the project root: two levels up from viewer/server.py.
+# Frozen into a single exe it is the folder holding the exe, which is ONE level
+# up -- two would walk straight out of the folder the user put it in and write
+# into whatever sits above, or fail on a read-only parent.
+#
+# Static assets are the exception: they are read-only and ship inside the bundle,
+# so they are read from wherever __file__ points -- PyInstaller's temporary
+# folder when frozen. Anything the *user* creates has to live next to the
+# executable instead, because that temporary folder is deleted on exit.
+if getattr(sys, "frozen", False):
+    APP_DIR = os.path.dirname(os.path.abspath(sys.executable))
+else:
+    APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-EXPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "exports")
-APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(
-    sys.executable if getattr(sys, "frozen", False) else __file__
-)))
+EXPORTS_DIR = os.path.join(APP_DIR, "exports")
 PREFERENCES_FILE = os.path.join(APP_DIR, "PZViewer_paths.json")
 os.makedirs(EXPORTS_DIR, exist_ok=True)
 
@@ -141,18 +159,16 @@ GAME_EXTENSIONS = {
     # only offers a row that opens an archive with no geometry of its own. The
     # load path still accepts one if the path is typed directly.
     'ff1': ('.mdl', '.pk2', '.sgd', '.tim2', '.mpx'),
-    # The Xbox FF1 build. Its characters arrive as .mpx, which is the container
-    # that carries geometry and its XPR0 textures together; its .mdl files are the
-    # same PK2_HEAD container as the PS2 ones but with geometry records the PS2
-    # parser does not read, and they are hidden inside the XBOX folder rather
-    # than listed here. .mpk and .acs are the pack and accessory containers that
-    # ship alongside, kept out of the tree for the same reason .xpr is.
-    'ff1x': ('.mpx',),
-    'ff2': ('.pk2', '.sgd', '.tim2', '.tm2'),
+    # The Xbox FF1 build. Characters arrive as .mpx and object/room assets as
+    # .pkx; both carry geometry and XPR0 textures. The .mdl files are the same
+    # PK2_HEAD container as the PS2 ones but use geometry records the PS2 parser
+    # does not read. .mpk and .acs are non-standalone containers kept out of tree.
+    'ff1x': ('.mpx', '.pkx'),
+    'ff2': ('.mdl', '.pk2', '.sgd', '.tim2', '.tm2'),
     'ff3': ('.pk4', '.sgd', '.tm2'),
     'ff2w': ('.mdlb', '.pk2b'),
     'all': ('.mdl', '.pk2', '.pk4', '.sgd', '.cld', '.obj', '.tm2', '.tim2', '.png',
-            '.mdlb', '.pk2b', '.mpx'),
+            '.mdlb', '.pk2b', '.mpx', '.pkx'),
 }
 
 # FF2 Wii ships each model in its own unit scale, so there is no single global
@@ -250,7 +266,8 @@ class LoadProgress:
 # component numbers to drop. These packs keep a "shado" helper body (the
 # ch000 shadow, shared by the first character costumes) that duplicates the real
 # bone names, so it z-fights and hides the character in the viewer. ch006 is the
-# odd one out: it stops at 0011 and stores the shadow there instead.
+# odd one out: it stops at 0011 and stores the shadow there instead. Some later
+# packs also keep a non-rendering final component (including collision data).
 SKIPPED_SGD_COMPONENTS = {
     "ch000": frozenset({15}),
     "ch001": frozenset({15}),
@@ -260,6 +277,54 @@ SKIPPED_SGD_COMPONENTS = {
     "ch005": frozenset({15}),
     "ch006": frozenset({11}),
     "ch007": frozenset({15}),
+    "ch066": frozenset({14}),
+    "ch200": frozenset({15}),
+    "ch201": frozenset({15}),
+    "ch202": frozenset({13}),
+    "ch203": frozenset({16}),
+    "ch210": frozenset({15}),
+    "ch211": frozenset({15}),
+    "ch212": frozenset({14}),
+    "ch213": frozenset({16}),
+    "ch220": frozenset({18}),
+    "ch221": frozenset({18}),
+}
+
+FF3_CHARACTER_DISPLAY_NAMES = {
+    "ch000": "Rei",
+    "ch001": "Miku",
+    "ch002": "Kei",
+    "ch003": "Rei",
+    "ch004": "Miku",
+    "ch005": "Kei",
+    "ch006": "Rei",
+    "ch007": "Miku",
+    "ch008": "Yuu",
+    "ch009": "Mio",
+    "ch010": "Yuu",
+    "ch011": "Mafuyu",
+    "ch012": "Yoshino",
+    "ch018": "Miku",
+    "ch021": "Yoshino",
+    "ch050": "Mayu",
+    "ch032": "Reika",
+    "ch034": "Yashuu",
+    "ch052": "Reika",
+    "ch056": "Yoshino",
+    "ch058": "Reika",
+    "ch060": "Reika",
+    "ch066": "Miku",
+    "ch067": "Miku",
+    "ch200": "Rei",
+    "ch201": "Rei",
+    "ch202": "Rei",
+    "ch203": "Rei",
+    "ch210": "Miku",
+    "ch211": "Miku",
+    "ch212": "Miku",
+    "ch213": "Miku",
+    "ch220": "Kei",
+    "ch221": "Kei",
 }
 
 
@@ -278,9 +343,324 @@ def character_pack_prefix(path):
     return None
 
 
+def ff3_character_display_name(entry):
+    """Add a verified character name to an FF3 pack's filetree label."""
+    match = re.match(r"(ch\d{3})_pk4$", entry, re.IGNORECASE)
+    character = match.group(1).lower() if match else None
+    display_name = FF3_CHARACTER_DISPLAY_NAMES.get(character)
+    return f"{display_name} ({entry})" if display_name else entry
+
+
 def skipped_sgd_components(path):
     """Return the numbered SGD components excluded for a model path."""
     return SKIPPED_SGD_COMPONENTS.get(character_pack_prefix(path), frozenset())
+
+
+def is_hidden_ff3_model_variant(target_dir, entry, game):
+    """Hide auxiliary *_00/_01/_02_pk4 packs in FF3's character model folder."""
+    normalized_dir = os.path.normpath(target_dir)
+    return (
+        game == 'ff3'
+        and os.path.basename(normalized_dir).casefold() == 'model'
+        and os.path.basename(os.path.dirname(normalized_dir)).casefold() == 'character'
+        and entry.casefold().endswith(('_00_pk4', '_01_pk4', '_02_pk4'))
+    )
+
+
+def is_hidden_ff3_character_entry(target_dir, entry, game):
+    """Hide non-model folders from FF3's character filetree."""
+    normalized_dir = os.path.normpath(target_dir)
+    return (
+        game == 'ff3'
+        and os.path.basename(normalized_dir).casefold() == 'character'
+        and entry.casefold() in {'shape', 'char_shadow_pk4', 'motion'}
+    )
+
+
+def is_hidden_ff3_root_entry(target_dir, entry, saved_root, game):
+    """Hide the camera folder from FF3's configured root filetree."""
+    if game != 'ff3' or not saved_root:
+        return False
+    normalized_dir = os.path.normcase(os.path.abspath(target_dir))
+    normalized_root = os.path.normcase(os.path.abspath(saved_root))
+    if normalized_dir == normalized_root and entry.casefold() == 'camera':
+        return True
+    hidden_children = {
+        'room': {'data'},
+        'door': {'motion'},
+        'furniture': {'motion'},
+    }
+    return (
+        os.path.normcase(os.path.dirname(os.path.abspath(target_dir))) == normalized_root
+        and entry.casefold() in hidden_children.get(
+            os.path.basename(os.path.normpath(target_dir)).casefold(), set()
+        )
+    )
+
+
+def is_hidden_ff2_camera_folder(target_dir, entry, saved_root, game):
+    """Hide the camera folder directly under FF2's configured root."""
+    if game not in {'ff2', 'ff2w'} or not saved_root or entry.casefold() != 'camera':
+        return False
+    return os.path.normcase(os.path.abspath(target_dir)) == os.path.normcase(
+        os.path.abspath(saved_root)
+    )
+
+
+def is_hidden_ff2w_room_auxiliary_folder(target_dir, entry, saved_root, game):
+    """Hide auxiliary MH/PZB/ZLD folders under FF2 Wii's room category."""
+    if game != 'ff2w' or not saved_root or entry.casefold() not in {'mh', 'pzb', 'zld'}:
+        return False
+    room_dir = os.path.join(saved_root, 'room')
+    return os.path.normcase(os.path.abspath(target_dir)) == os.path.normcase(
+        os.path.abspath(room_dir)
+    )
+
+
+def is_hidden_ff2_empty_furniture_pk2(target_dir, entry, saved_root, game):
+    """Hide the known empty FF2 furniture PK2 archives from the filetree."""
+    if game != 'ff2' or not saved_root or entry.casefold() not in {'f110.pk2', 'f111.pk2'}:
+        return False
+    furniture_dir = os.path.join(saved_root, 'furniture')
+    return os.path.normcase(os.path.abspath(target_dir)) == os.path.normcase(
+        os.path.abspath(furniture_dir)
+    )
+
+
+def is_hidden_ff1_animation_folder(target_dir, entry, saved_root, game):
+    """Hide FF1's animation folder directly under the configured man directory."""
+    if game != 'ff1' or not saved_root or entry.casefold() != 'anm':
+        return False
+    man_dir = os.path.join(saved_root, 'man')
+    return os.path.normcase(os.path.abspath(target_dir)) == os.path.normcase(
+        os.path.abspath(man_dir)
+    )
+
+
+def is_hidden_ff1x_furnmime_folder(target_dir, entry, saved_root, game):
+    """Hide FF1 Xbox's auxiliary furniture MIME folder at the configured root."""
+    if game != 'ff1x' or not saved_root or entry.casefold() != 'furnmime':
+        return False
+    return os.path.normcase(os.path.abspath(target_dir)) == os.path.normcase(
+        os.path.abspath(saved_root)
+    )
+
+
+def resolve_ff1_man_directory(target_dir, saved_root, game):
+    """Skip FF1's man wrapper and browse its model directory directly."""
+    if game != 'ff1' or not saved_root:
+        return target_dir
+    man_dir = os.path.join(saved_root, 'man')
+    if (
+        os.path.normcase(os.path.abspath(target_dir))
+        == os.path.normcase(os.path.abspath(man_dir))
+        and os.path.isdir(os.path.join(man_dir, 'mdl'))
+    ):
+        return os.path.join(man_dir, 'mdl')
+    return target_dir
+
+
+def resolve_ff1_parent_directory(target_dir, saved_root, parent_dir, game):
+    """Return from FF1's man/mdl directory to the configured game root."""
+    if game != 'ff1' or not saved_root:
+        return parent_dir
+    mdl_dir = os.path.join(saved_root, 'man', 'mdl')
+    if os.path.normcase(os.path.abspath(target_dir)) == os.path.normcase(
+        os.path.abspath(mdl_dir)
+    ):
+        return os.path.abspath(saved_root)
+    return parent_dir
+
+
+def resolve_ff1x_man_directory(target_dir, saved_root, game):
+    """Open FF1 Xbox's man category directly in its model directory."""
+    if game != 'ff1x' or not saved_root:
+        return target_dir
+    man_dir = os.path.join(saved_root, 'man')
+    mdl_dir = os.path.join(man_dir, 'mdl')
+    if (
+        os.path.normcase(os.path.abspath(target_dir))
+        == os.path.normcase(os.path.abspath(man_dir))
+        and os.path.isdir(mdl_dir)
+    ):
+        return mdl_dir
+    return target_dir
+
+
+def resolve_ff1x_parent_directory(target_dir, saved_root, parent_dir, game):
+    """Return from FF1 Xbox's man/mdl directory to its configured game root."""
+    if game != 'ff1x' or not saved_root:
+        return parent_dir
+    mdl_dir = os.path.join(saved_root, 'man', 'mdl')
+    if os.path.normcase(os.path.abspath(target_dir)) == os.path.normcase(
+        os.path.abspath(mdl_dir)
+    ):
+        return os.path.abspath(saved_root)
+    return parent_dir
+
+
+def resolve_ff2_room_directory(target_dir, saved_root, game):
+    """Open FF2's room category directly in its PK2 asset folder."""
+    if game != 'ff2' or not saved_root:
+        return target_dir
+    room_dir = os.path.join(saved_root, 'room')
+    pk2_dir = os.path.join(room_dir, 'pk2')
+    if (
+        os.path.normcase(os.path.abspath(target_dir))
+        == os.path.normcase(os.path.abspath(room_dir))
+        and os.path.isdir(pk2_dir)
+    ):
+        return pk2_dir
+    return target_dir
+
+
+def resolve_ff2_man_directory(target_dir, saved_root, game):
+    """Open FF2's man category directly in its model directory."""
+    if game != 'ff2' or not saved_root:
+        return target_dir
+    man_dir = os.path.join(saved_root, 'man')
+    mdl_dir = os.path.join(man_dir, 'mdl')
+    if (
+        os.path.normcase(os.path.abspath(target_dir))
+        == os.path.normcase(os.path.abspath(man_dir))
+        and os.path.isdir(mdl_dir)
+    ):
+        return mdl_dir
+    return target_dir
+
+
+def resolve_ff2_parent_directory(target_dir, saved_root, parent_dir, game):
+    """Return from FF2's room PK2 or man model directory to the game root."""
+    if game != 'ff2' or not saved_root:
+        return parent_dir
+    shortcut_dirs = (
+        os.path.join(saved_root, 'room', 'pk2'),
+        os.path.join(saved_root, 'man', 'mdl'),
+    )
+    normalized_target = os.path.normcase(os.path.abspath(target_dir))
+    if any(
+        normalized_target == os.path.normcase(os.path.abspath(directory))
+        for directory in shortcut_dirs
+    ):
+        return os.path.abspath(saved_root)
+    return parent_dir
+
+
+def is_hidden_ff3_furniture_archive(target_dir, entry, saved_root, game):
+    """Hide standalone furniture PK4 files alongside the browsable pack folders."""
+    if game != 'ff3' or not saved_root or not entry.casefold().endswith('.pk4'):
+        return False
+    furniture_model_dir = os.path.join(saved_root, 'furniture', 'model')
+    return os.path.normcase(os.path.abspath(target_dir)) == os.path.normcase(
+        os.path.abspath(furniture_model_dir)
+    )
+
+
+def is_hidden_ff3_character_pack_entry(target_dir, entry, game):
+    """Hide auxiliary resource folders inside FF3 model packs."""
+    normalized_dir = os.path.normpath(target_dir)
+    pack_name = os.path.basename(normalized_dir).casefold()
+    category = os.path.basename(os.path.dirname(os.path.dirname(normalized_dir))).casefold()
+    resource_folders = {
+        'character': {'01_tpk', '02_cld', '03_mono', '04_flgs'},
+        'accessory': {'01_tpk', '02_mono', '03_flgs'},
+        'door': {'01_tpk', '02_mono', '03_flgs'},
+        'fly': {'01_tpk', '02_cls', '03_mono', '04_flgs'},
+        'furniture': {'01_tpk', '02_mono', '03_flgs'},
+        'object': {'01_tpk', '02_mono', '03_flgs'},
+        'room': {'01_tpk', '02_cld', '02_mono', '03_mono', '03_flgs', '04_flgs'},
+    }
+    pack_pattern = r'r[a-z]+\d+[a-z]*_pk4' if category == 'room' else (
+        r'(?:ch|a|d|f|o|fly)\d+(?:_pk4)?'
+    )
+    return (
+        game == 'ff3'
+        and os.path.basename(os.path.dirname(normalized_dir)).casefold() == 'model'
+        and category in resource_folders
+        and re.fullmatch(pack_pattern, pack_name) is not None
+        and entry.casefold() in resource_folders[category]
+    )
+
+
+def resolve_ff3_category_directory(target_dir, saved_root, game):
+    """Skip an FF3 model category wrapper when opening it from the game root."""
+    model_categories = {
+        'character', 'accessory', 'door', 'fly', 'furniture', 'object', 'room'
+    }
+    normalized_dir = os.path.abspath(target_dir)
+    normalized_root = os.path.abspath(saved_root) if saved_root else ""
+    if (game == 'ff3' and normalized_root
+            and os.path.basename(normalized_dir).casefold() in model_categories
+            and os.path.normcase(os.path.dirname(normalized_dir))
+            == os.path.normcase(normalized_root)):
+        model_dir = os.path.join(normalized_dir, 'model')
+        if os.path.isdir(model_dir):
+            return model_dir
+    return target_dir
+
+
+def ff3_model_pack_sgd_directory(pack_dir):
+    """Return an FF3 model pack's nested SGD directory when it exists."""
+    pack_name = os.path.basename(os.path.normpath(pack_dir))
+    pack_category = os.path.basename(
+        os.path.dirname(os.path.dirname(os.path.normpath(pack_dir)))
+    ).casefold()
+    pack_pattern = (
+        r'r[a-z]+\d+[a-z]*_pk4'
+        if pack_category == 'room'
+        else r'(?:ch|a|d|f|o|fly)\d+_pk4'
+    )
+    if re.fullmatch(pack_pattern, pack_name, re.IGNORECASE) is None:
+        return None
+    sgd_dir = os.path.join(pack_dir, '00_mpk', 'mpk_pk4', '00_sgd')
+    return sgd_dir if os.path.isdir(sgd_dir) else None
+
+
+def resolve_ff3_model_pack_directory(target_dir, saved_root, game):
+    """Open FF3 model packs directly at their nested SGD directory."""
+    if not saved_root or game != 'ff3':
+        return target_dir
+    normalized_dir = os.path.abspath(target_dir)
+    for category in ('character', 'accessory', 'door', 'fly', 'furniture', 'object', 'room'):
+        model_dir = os.path.join(os.path.abspath(saved_root), category, 'model')
+        if os.path.normcase(os.path.dirname(normalized_dir)) == os.path.normcase(model_dir):
+            return ff3_model_pack_sgd_directory(normalized_dir) or target_dir
+    return target_dir
+
+
+def resolve_ff3_parent_directory(target_dir, saved_root, parent_dir, game):
+    """Return from FF3 model packs to model, and from model to game root."""
+    if not saved_root or game != 'ff3':
+        return parent_dir
+    normalized_dir = os.path.normcase(os.path.abspath(target_dir))
+    normalized_root = os.path.normcase(os.path.abspath(saved_root))
+    categories = ('character', 'accessory', 'door', 'fly', 'furniture', 'object', 'room')
+    model_dirs = [
+        os.path.normcase(os.path.abspath(os.path.join(saved_root, category, 'model')))
+        for category in categories
+    ]
+    if normalized_dir in model_dirs:
+        return normalized_root
+    for category in categories:
+        model_dir = os.path.abspath(os.path.join(saved_root, category, 'model'))
+        try:
+            relative = os.path.relpath(os.path.abspath(target_dir), model_dir)
+        except ValueError:
+            continue
+        parts = relative.split(os.sep)
+        if (
+            len(parts) == 4
+            and re.fullmatch(
+                r'(?:ch|a|d|f|o|fly)\d+_pk4|r[a-z]+\d+[a-z]*_pk4',
+                parts[0], re.IGNORECASE
+            )
+            and [part.casefold() for part in parts[1:]]
+            == ['00_mpk', 'mpk_pk4', '00_sgd']
+        ):
+            sgd_dir = ff3_model_pack_sgd_directory(os.path.join(model_dir, parts[0]))
+            if sgd_dir and normalized_dir == os.path.normcase(os.path.abspath(sgd_dir)):
+                return model_dir
+    return parent_dir
 
 
 def numbered_sgd_files(sgd_dir, excluded_indexes=(), exclude_path=None):
@@ -298,6 +678,22 @@ def numbered_sgd_files(sgd_dir, excluded_indexes=(), exclude_path=None):
     )
 
 
+def ff3_model_pack_load_path(pack_dir):
+    """Find the first renderable SGD used to auto-load an FF3 model pack."""
+    sgd_dir = ff3_model_pack_sgd_directory(pack_dir)
+    if not sgd_dir:
+        return None
+    excluded = set(skipped_sgd_components(pack_dir))
+    if os.path.basename(
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.normpath(pack_dir))))
+    ).casefold() != 'room':
+        excluded.add(15)
+        if not any(os.path.splitext(name)[0] == "15" for name in os.listdir(sgd_dir)):
+            excluded.add(14)
+    candidates = numbered_sgd_files(sgd_dir, excluded)
+    return os.path.join(sgd_dir, candidates[0]) if candidates else None
+
+
 def serialize_textures(textures):
     """Encode PIL surfaces as the data-URI list the frontend expects."""
     tex_list = []
@@ -306,8 +702,13 @@ def serialize_textures(textures):
         img.save(buf, format='PNG')
         w, h = img.size
         alpha_min = alpha_max = 255
+        alpha_has_partial = False
         if "A" in img.getbands():
-            alpha_min, alpha_max = img.getchannel("A").getextrema()
+            alpha = img.getchannel("A")
+            alpha_min, alpha_max = alpha.getextrema()
+            if alpha_min < 255:
+                histogram = alpha.histogram()
+                alpha_has_partial = any(histogram[1:255])
         tex_list.append({
             "data_uri": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode('ascii'),
             "width": w,
@@ -315,6 +716,7 @@ def serialize_textures(textures):
             "has_alpha": alpha_min < 255,
             "alpha_min": alpha_min,
             "alpha_max": alpha_max,
+            "alpha_has_partial": alpha_has_partial,
         })
     return tex_list
 
@@ -982,6 +1384,15 @@ def handle_load_file(file_path, game="", xpr_override=None):
         entries = unpack_pk2_parser(file_path)
         progress.log("pk2_extraction", f"entries={len(entries)}")
         if not entries:
+            with open(file_path, "rb") as pk2_file:
+                header = pk2_file.read(4)
+            if len(header) == 4 and struct.unpack("<I", header)[0] == 0:
+                return {
+                    "error": (
+                        f"PK2 archive is empty (zero entries; no geometry to load): "
+                        f"{file_path}"
+                    )
+                }
             progress.log("pk2_extraction", "status=error entries=0")
             return {"error": f"PK2 does not contain a room SGD: {file_path}"}
         lit_path = os.path.splitext(file_path)[0] + ".lit"
@@ -989,16 +1400,20 @@ def handle_load_file(file_path, game="", xpr_override=None):
         parsed_entries = 0
         skipped_entries = []
         ff2_item_structure = None
-        ff2_item_images = []
-        if use_ff2_parser and re.search(
+        normalized_pk2_path = os.path.normcase(os.path.abspath(file_path))
+        is_ff2_furniture_pk2 = (
+            use_ff2_parser
+            and ("\\furniture\\" in normalized_pk2_path or "/furniture/" in normalized_pk2_path)
+        )
+        is_ff2_item_pk2 = use_ff2_parser and re.search(
             r"(?:^|[-_])i\d{3}(?:_|\.|$)", base_name.lower()
-        ):
-            payload = b"".join(entry.get("data", b"") for entry in entries)
+        ) is not None
+        if is_ff2_furniture_pk2 or is_ff2_item_pk2:
             ff2_item_structure = {
-                "format": "ff2_item_package",
-                "tim2_offsets": [],
-                "tim2_pictures": [],
-                "vif_block_offsets": [],
+                "format": (
+                    "ff2_furniture_package" if is_ff2_furniture_pk2
+                    else "ff2_item_package"
+                ),
                 "entries": [
                     {
                         "index": entry.get("index"),
@@ -1008,38 +1423,81 @@ def handle_load_file(file_path, game="", xpr_override=None):
                     for entry in entries
                 ],
             }
-            cursor = 0
-            while True:
-                offset = payload.find(b"TIM2", cursor)
-                if offset < 0:
-                    break
-                ff2_item_structure["tim2_offsets"].append(offset)
+            item_sgd_offset = entries[0].get("offset") if entries else None
+            if not isinstance(item_sgd_offset, int) or item_sgd_offset < 0:
+                return {"error": f"FF2 item PK2 has no valid SGD entry: {file_path}"}
+            try:
+                with open(file_path, "rb") as item_file:
+                    item_data = item_file.read()
+                model = parse_sgd_ff2(
+                    item_data[item_sgd_offset:],
+                    name=base_name,
+                    lit_data=lit_data,
+                )
+            except (ValueError, IndexError, struct.error) as exc:
+                progress.error("ff2_item_sgd_parse", exc)
+                return {"error": f"Failed to parse FF2 item geometry: {exc}"}
+            if not model or not model.meshes:
+                return {"error": f"No renderable geometry found in FF2 item PK2: {file_path}"}
+            textures = [
+                picture["image"]
+                for picture in iter_embedded(file_path)
+                if picture.get("image") is not None
+            ]
+            if len(textures) == 1:
+                for material in model.materials:
+                    material.texture_index = 0
+            parsed_entries = 1
+            ff2_item_structure["sgd_offset"] = item_sgd_offset
+            ff2_item_structure["meshes"] = len(model.meshes)
+            ff2_item_structure["decoded_textures"] = len(textures)
+            ff2_item_structure["materials_mapped"] = (
+                len(model.materials) if len(textures) == 1 else 0
+            )
+            progress.log(
+                "ff2_item_sgd_parse",
+                f"offset={item_sgd_offset} meshes={len(model.meshes)} "
+                f"materials={len(model.materials)}"
+            )
+            if is_ff2_furniture_pk2:
+                item_payload = item_data[item_sgd_offset:]
+                texture_debug = {}
                 try:
-                    for picture in decode_texture(payload[offset:]):
-                        image = picture.get("image")
-                        if image is not None:
-                            ff2_item_images.append(image)
-                        ff2_item_structure["tim2_pictures"].append({
-                            "offset": offset,
-                            "width": image.width if image else 0,
-                            "height": image.height if image else 0,
-                            "tbp0": picture.get("gs_tex0", 0) & 0x3FFF,
-                        })
-                except (ValueError, IndexError, struct.error):
-                    pass
-                cursor = offset + 4
-            cursor = 0
-            while True:
-                offset = payload.find(b"\x50\x10", cursor)
-                if offset < 0:
-                    break
-                ff2_item_structure["vif_block_offsets"].append(offset)
-                cursor = offset + 2
+                    images, uploads = reconstruct_textures(
+                        item_payload,
+                        model.materials,
+                        diagnostics=texture_debug,
+                    )
+                    for material in model.materials:
+                        image = images.for_material(material)
+                        if image is None:
+                            continue
+                        texture_index = next(
+                            (index for index, existing in enumerate(textures)
+                             if existing is image),
+                            -1,
+                        )
+                        if texture_index < 0:
+                            textures.append(image)
+                            texture_index = len(textures) - 1
+                        material.texture_index = texture_index
+                    ff2_item_structure["gs_uploads"] = len(uploads)
+                    ff2_item_structure["materials_mapped"] = sum(
+                        material.texture_index >= 0 for material in model.materials
+                    )
+                except (ValueError, struct.error) as exc:
+                    progress.error("ff2_furniture_texture_reconstruction", exc)
+                ff2_item_structure["texture_reconstruction"] = texture_debug
+                progress.log(
+                    "ff2_furniture_texture_reconstruction",
+                    f"textures={len(textures)} "
+                    f"uploads={ff2_item_structure.get('gs_uploads', 0)}"
+                )
         # Keep TEX0 descriptions per PK2 entry.  Reconstructing after merging
         # all entries makes auxiliary materials query unrelated VRAM, while
         # reconstructing only the first entry loses late panel textures.
         entry_materials = {}
-        for index, entry in enumerate(entries):
+        for index, entry in (enumerate(entries) if ff2_item_structure is None else ()):
             try:
                 part = (parse_sgd_ff2 if use_ff2_parser else parse_sgd_ff1)(
                     entry["data"],
@@ -1076,7 +1534,11 @@ def handle_load_file(file_path, game="", xpr_override=None):
                     "geometry_merge",
                     f"entry={index} meshes={len(model.meshes)}"
                 )
-        if model:
+        if model and ff2_item_structure is not None:
+            model_type = "prop" if is_ff2_furniture_pk2 else "item"
+            model.texture_debug = getattr(model, "texture_debug", {})
+            model.texture_debug["ff2_item_structure"] = ff2_item_structure
+        elif model:
             progress.log(
                 "geometry_merge",
                 f"status=complete entries_parsed={parsed_entries} meshes={len(model.meshes)}"
@@ -1147,43 +1609,7 @@ def handle_load_file(file_path, game="", xpr_override=None):
                 model.texture_debug = getattr(model, "texture_debug", {})
                 model.texture_debug["ff2_item_structure"] = ff2_item_structure
         elif ff2_item_structure is not None:
-            serialized_textures = []
-            for image in ff2_item_images:
-                buf = BytesIO()
-                image.save(buf, format="PNG")
-                serialized_textures.append({
-                    "data_uri": "data:image/png;base64,"
-                    + base64.b64encode(buf.getvalue()).decode("ascii"),
-                    "width": image.width,
-                    "height": image.height,
-                    "has_alpha": (
-                        "A" in image.getbands()
-                        and image.getchannel("A").getextrema()[0] < 255
-                    ),
-                    "alpha_min": (
-                        image.getchannel("A").getextrema()[0]
-                        if "A" in image.getbands() else 255
-                    ),
-                    "alpha_max": (
-                        image.getchannel("A").getextrema()[1]
-                        if "A" in image.getbands() else 255
-                    ),
-                })
-            ff2_item_structure["decoded_images"] = len(serialized_textures)
-            return {
-                "filename": os.path.basename(file_path),
-                "model_type": "item",
-                "type": "item",
-                "meshes": [],
-                "materials": [],
-                "textures": serialized_textures,
-                "uvs_flipped": False,
-                "diagnostics": {
-                    "ff2_item_structure": ff2_item_structure,
-                    "materials_mapped": 0,
-                    "materials_unmapped": 0,
-                },
-            }
+            return {"error": f"No renderable geometry found in FF2 item PK2: {file_path}"}
 
     elif ext == '.mpk':
         # A model *pack*, not a standalone asset: it is the geometry half that
@@ -1210,6 +1636,32 @@ def handle_load_file(file_path, game="", xpr_override=None):
                 f"Open the matching .mdl or .mpx instead."
             )
         }
+
+    elif ext == '.pkx':
+        try:
+            pkx_result = parse_ff1x_pkx(file_path, name=base_name)
+        except (PKXError, XboxMPXError, XPR0Error) as exc:
+            progress.error("ff1x_pkx_parse", exc)
+            return {"error": f"Unsupported or malformed FF1 Xbox PKX: {exc}"}
+        model = pkx_result.model
+        textures = [texture["image"] for texture in pkx_result.textures]
+        asset_category = os.path.basename(os.path.dirname(file_path)).casefold()
+        model_type = "room" if asset_category == "room" else (
+            "item" if asset_category == "item" else "prop"
+        )
+        model.parse_diagnostics = pkx_result.diagnostics
+        if model_type == "room":
+            lit_data, lit_path = read_lit_sidecar(file_path)
+            lighting = apply_ff1_xbox_room_lighting(model, lit_data)
+            if lit_path:
+                lighting["source"] = os.path.basename(lit_path)
+            pkx_result.diagnostics["ff1_lighting"] = lighting
+        progress.log(
+            "ff1x_pkx_parse",
+            f"status=complete segments={pkx_result.diagnostics['package_segments']} "
+            f"meshes={len(model.meshes)} materials={len(model.materials)} "
+            f"textures={len(textures)}"
+        )
 
     elif ext in ('.mdl', '.mpx', '.xpr'):
         # The PS2 and Xbox builds share both the PK2_HEAD container and the .mdl
@@ -1285,7 +1737,7 @@ def handle_load_file(file_path, game="", xpr_override=None):
                 )
                 if ext == '.xpr':
                     # A standalone archive must not leave the previous model selected for export.
-                    from pz_core.pz_sgd_ff3 import SGDModel
+                    from pz_core.ff3.pz_sgd_ff3 import SGDModel
                     CURRENT_STATE.update({"model": SGDModel(base_name),
                         "textures": [p["image"] for p in xbox_result.textures],
                         "collision": [], "source_file": file_path, "model_type": "textures"})
@@ -1314,35 +1766,52 @@ def handle_load_file(file_path, game="", xpr_override=None):
                 f"bound={xd['bound_by']}"
             )
         else:
-            # An Xbox .mdl lands here too: both builds share the PK2_HEAD
-            # container and the .mdl extension. They are handed to the PS2
-            # parser, which reads the 0x1050 geometry records of the ones whose
-            # layout it understands -- for those the geometry comes out
-            # identical to the PS2 original, only without textures, because the
-            # surfaces live in the embedded XPR0 archive. The rest it refuses,
-            # and this turns that refusal into a message that points at the
-            # container which does carry the geometry and the textures.
-            try:
-                mdl_result = parse_ff1_mdl(file_path, name=base_name)
-            except FF1MDLError as exc:
-                progress.error("mdl_parse", exc)
-                message = f"Unsupported or malformed FF1 MDL: {exc}"
-                if _has_xbox_texture_archive(file_path):
-                    message += (
-                        " (This is an Xbox build container: its surfaces are in an "
-                        "embedded XPR0 archive and its geometry uses records the PS2 "
-                        "reader does not know. Open the .mpx next to it instead.)"
-                    )
-                return {"error": message}
-            model = mdl_result.model
-            textures = mdl_result.textures
-            model_type = "character"
-            model.parse_diagnostics = mdl_result.diagnostics
-            progress.log(
-                "mdl_parse",
-                f"status=complete model_entries={mdl_result.diagnostics['model_entries_parsed']} "
-                f"meshes={len(model.meshes)} textures={len(textures)}"
-            )
+            if game.lower() == "ff2":
+                try:
+                    mdl_result = parse_ff2_mdl(file_path, name=base_name)
+                except FF2MDLError as exc:
+                    progress.error("ff2_mdl_parse", exc)
+                    return {"error": f"Unsupported or malformed FF2 MDL: {exc}"}
+                model = mdl_result.model
+                textures = mdl_result.textures
+                model_type = "character"
+                model.parse_diagnostics = mdl_result.diagnostics
+                progress.log(
+                    "ff2_mdl_parse",
+                    f"status=complete model_entries="
+                    f"{mdl_result.diagnostics['model_entries_parsed']} "
+                    f"meshes={len(model.meshes)} textures={len(textures)}"
+                )
+            else:
+                # An Xbox .mdl lands here too: both builds share the PK2_HEAD
+                # container and the .mdl extension. They are handed to the PS2
+                # parser, which reads the 0x1050 geometry records of the ones whose
+                # layout it understands -- for those the geometry comes out
+                # identical to the PS2 original, only without textures, because the
+                # surfaces live in the embedded XPR0 archive. The rest it refuses,
+                # and this turns that refusal into a message that points at the
+                # container which does carry the geometry and the textures.
+                try:
+                    mdl_result = parse_ff1_mdl(file_path, name=base_name)
+                except FF1MDLError as exc:
+                    progress.error("mdl_parse", exc)
+                    message = f"Unsupported or malformed FF1 MDL: {exc}"
+                    if _has_xbox_texture_archive(file_path):
+                        message += (
+                            " (This is an Xbox build container: its surfaces are in an "
+                            "embedded XPR0 archive and its geometry uses records the PS2 "
+                            "reader does not know. Open the .mpx next to it instead.)"
+                        )
+                    return {"error": message}
+                model = mdl_result.model
+                textures = mdl_result.textures
+                model_type = "character"
+                model.parse_diagnostics = mdl_result.diagnostics
+                progress.log(
+                    "mdl_parse",
+                    f"status=complete model_entries={mdl_result.diagnostics['model_entries_parsed']} "
+                    f"meshes={len(model.meshes)} textures={len(textures)}"
+                )
 
     elif ext in ('.mdlb', '.pk2b'):
         mapped = 0
@@ -1358,8 +1827,13 @@ def handle_load_file(file_path, game="", xpr_override=None):
                 texture_set = parse_ff2w_textures(ppdb_path, model)
                 textures = list(texture_set)
                 for material in model.materials:
-                    slot = texture_set.material_slots.get(material.index)
-                    if slot is not None:
+                    # ETAM may pair the diffuse texture with a separate alpha
+                    # mask. Prefer the composited slot when that pair exists;
+                    # binding only material_slots drops hair/lash/lace alpha.
+                    slot = texture_set.material_alpha_slots.get(material.index, -1)
+                    if slot < 0:
+                        slot = texture_set.material_slots.get(material.index, -1)
+                    if slot >= 0:
                         material.texture_index = slot
                         mapped += 1
             else:
@@ -1671,6 +2145,14 @@ def handle_load_file(file_path, game="", xpr_override=None):
     # narrow correction as direct PK4 loads.
     apply_named_foliage_uv_corrections(model)
 
+    # FF2 PS2 room maps use the opposite texture origin from the default
+    # WebGL upload path. Furniture PK2 assets have the same inversion, but
+    # keep both corrections scoped to their respective FF2 PK2 categories.
+    if use_ff2_parser and ext == ".pk2" and is_ff2_furniture_pk2:
+        model.uvs_are_flipped = True
+    elif use_ff2_parser and ext == ".pk2" and model_type == "room":
+        model.uvs_are_flipped = True
+
     # Every model, whatever the game or the container it came out of. These
     # atlases are low resolution and are magnified across whole surfaces, so
     # nearest sampling breaks them into hard texel blocks that are not in the
@@ -1740,6 +2222,7 @@ def find_batch_files(source_dir, recursive=True):
     - *.pk4 files        (FF3 object / prop / room models)
     - *.mdl files        (FF1 character models, PS2 or Xbox build)
     - *.mpx files        (FF1 Xbox character models)
+    - *.pkx files        (FF1 Xbox item, furniture, door and room models)
     - *.pk2 files        (FF1/FF2 room models)
 
     The Xbox model *pack* (.mpk) and accessory set (.acs) are deliberately not
@@ -1748,7 +2231,7 @@ def find_batch_files(source_dir, recursive=True):
     """
     results = []
     seen = set()
-    file_exts = {'.pk4', '.mdl', '.mpx', '.pk2', '.mdlb', '.pk2b'}
+    file_exts = {'.pk4', '.mdl', '.mpx', '.pkx', '.pk2', '.mdlb', '.pk2b'}
 
     def add(path):
         norm = os.path.normcase(os.path.abspath(path))
@@ -1945,9 +2428,30 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": "Folder not found"}).encode('utf-8'))
                 return
+
+            target_dir = resolve_ff1_man_directory(target_dir, saved_root, game)
+            target_dir = resolve_ff1x_man_directory(target_dir, saved_root, game)
+            target_dir = resolve_ff2_room_directory(target_dir, saved_root, game)
+            target_dir = resolve_ff2_man_directory(target_dir, saved_root, game)
+            target_dir = resolve_ff3_category_directory(target_dir, saved_root, game)
+            target_dir = resolve_ff3_model_pack_directory(
+                target_dir, saved_root, game
+            )
             
             absolute_target = os.path.abspath(target_dir)
             parent_dir = os.path.dirname(absolute_target)
+            parent_dir = resolve_ff1_parent_directory(
+                absolute_target, saved_root, parent_dir, game
+            )
+            parent_dir = resolve_ff1x_parent_directory(
+                absolute_target, saved_root, parent_dir, game
+            )
+            parent_dir = resolve_ff2_parent_directory(
+                absolute_target, saved_root, parent_dir, game
+            )
+            parent_dir = resolve_ff3_parent_directory(
+                absolute_target, saved_root, parent_dir, game
+            )
             if saved_root:
                 saved_root_abs = os.path.abspath(saved_root)
                 # The browser never walks out of the configured game folder. At
@@ -1991,29 +2495,80 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                 # where the request still says game=ff1.
                 hide_xbox_mdl = (game == 'ff1x' or os.path.basename(
                     os.path.normpath(target_dir)).casefold() == 'xbox')
-
                 for entry in all_entries:
                     if entry in hidden_numbered:
                         continue
                     full_p = os.path.join(target_dir, entry)
                     is_dir = os.path.isdir(full_p)
                     ext = os.path.splitext(entry)[1].lower()
+                    if is_dir and is_hidden_ff3_model_variant(target_dir, entry, game):
+                        continue
+                    if is_dir and is_hidden_ff3_character_entry(target_dir, entry, game):
+                        continue
+                    if is_dir and is_hidden_ff3_character_pack_entry(target_dir, entry, game):
+                        continue
+                    if is_dir and is_hidden_ff3_root_entry(
+                            target_dir, entry, saved_root, game):
+                        continue
+                    if is_dir and is_hidden_ff1_animation_folder(
+                            target_dir, entry, saved_root, game):
+                        continue
+                    if is_dir and is_hidden_ff1x_furnmime_folder(
+                            target_dir, entry, saved_root, game):
+                        continue
+                    if is_dir and is_hidden_ff2_camera_folder(
+                            target_dir, entry, saved_root, game):
+                        continue
+                    if is_dir and is_hidden_ff2w_room_auxiliary_folder(
+                            target_dir, entry, saved_root, game):
+                        continue
+                    if not is_dir and is_hidden_ff2_empty_furniture_pk2(
+                            target_dir, entry, saved_root, game):
+                        continue
+                    if not is_dir and is_hidden_ff3_furniture_archive(
+                            target_dir, entry, saved_root, game):
+                        continue
                     if hide_xbox_mdl and ext == '.mdl':
                         continue
                     if not is_dir and ext not in file_extensions:
                         continue
                     t_str = "dir" if is_dir else ext.lstrip('.')
+                    load_path = None
+                    if is_dir and game == 'ff3':
+                        for category in (
+                            'character', 'accessory', 'door', 'fly', 'furniture', 'object',
+                            'room'
+                        ):
+                            model_dir = os.path.join(saved_root, category, 'model')
+                            if os.path.normcase(os.path.abspath(target_dir)) == os.path.normcase(
+                                    os.path.abspath(model_dir)):
+                                load_path = ff3_model_pack_load_path(full_p)
+                                break
                     # Mark the anchor of a multi-part pack specially
                     if not is_dir and entry in numbered_sgds and hidden_numbered:
                         t_str = "sgd_pack"
-                    items.append({
-                        "name": entry if not hidden_numbered or entry not in numbered_sgds
-                                else f"{entry}  (+{len(hidden_numbered)} parts)",
+                    display_entry = entry
+                    if not hidden_numbered or entry not in numbered_sgds:
+                        if (
+                            game == 'ff3'
+                            and os.path.normcase(os.path.abspath(target_dir))
+                            == os.path.normcase(os.path.abspath(os.path.join(
+                                saved_root, 'character', 'model'
+                            )))
+                        ):
+                            display_entry = ff3_character_display_name(entry)
+                    else:
+                        display_entry = f"{entry}  (+{len(hidden_numbered)} parts)"
+                    item = {
+                        "name": display_entry,
                         "path": full_p.replace('\\', '/'),
                         "type": t_str,
                         "is_dir": is_dir,
                         "size": 0 if is_dir else os.path.getsize(full_p)
-                    })
+                    }
+                    if load_path:
+                        item["load_path"] = load_path.replace('\\', '/')
+                    items.append(item)
             except Exception as e:
                 pass
 

@@ -1,0 +1,561 @@
+{
+  "source": "r000_genkan.pk2",
+  "source_sha256": "42e7a57607a4bce683a057cf15d9e55c01311e54b13be86fcc1225631bce8d99",
+  "meshes": 262,
+  "vertices": 9667,
+  "triangles": 5665,
+  "bones": 143,
+  "textures": [
+    {
+      "index": 0,
+      "file": "texture_00.png",
+      "width": 128,
+      "height": 256,
+      "rgba_sha256": "62bfe8230fb577fcc635673216c11dfb7024c878f7d91b6735afe5a45fba7973",
+      "non_grey_pixels": 10311,
+      "material_names": [
+        "Door_irigut"
+      ]
+    },
+    {
+      "index": 1,
+      "file": "texture_01.png",
+      "width": 128,
+      "height": 64,
+      "rgba_sha256": "7e7eb3b758a239655ee8c9b484ec668cbe68e7e1ac809cd31b0c8adf3acb3677",
+      "non_grey_pixels": 8170,
+      "material_names": [
+        "r-00-tex-00",
+        "r-00-tex-00"
+      ]
+    },
+    {
+      "index": 2,
+      "file": "texture_02.png",
+      "width": 64,
+      "height": 64,
+      "rgba_sha256": "5fe8cdc14fe0aa0151ecacdae91fe7b76bdf56ef747351f5a92133324b071b27",
+      "non_grey_pixels": 3659,
+      "material_names": [
+        "r-00-kaidan",
+        "r-00-kaidan"
+      ]
+    },
+    {
+      "index": 3,
+      "file": "texture_03.png",
+      "width": 128,
+      "height": 64,
+      "rgba_sha256": "9d8dff1156a89504dfb701f1db8d8d464a1877756b8fd0e750a446a94ea3cd06",
+      "non_grey_pixels": 6217,
+      "material_names": [
+        "r-00-tex-do"
+      ]
+    },
+    {
+      "index": 4,
+      "file": "texture_04.png",
+      "width": 64,
+      "height": 64,
+      "rgba_sha256": "3ec63e327f7af25db810d766ba8bf31ceccb0b7315a352c58af94d771752a0bc",
+      "non_grey_pixels": 2833,
+      "material_names": [
+        "r-00-tex-00",
+        "r-00-tex-00"
+      ]
+    },
+    {
+      "index": 5,
+      "file": "texture_05.png",
+      "width": 128,
+      "height": 64,
+      "rgba_sha256": "f298d4556aa785550da2182c267c4c17dc6929d544361038c7434b32d4657eb2",
+      "non_grey_pixels": 5794,
+      "material_names": [
+        "r-03-tex-00"
+      ]
+    },
+    {
+      "index": 6,
+      "file": "texture_06.png",
+      "width": 128,
+      "height": 64,
+      "rgba_sha256": "75c85d4ff5b56895cf520d71bbd05d4d411438c46a65255fedc4f45a22ec7ce7",
+      "non_grey_pixels": 8111,
+      "material_names": [
+        "r-00-tex-02"
+      ]
+    },
+    {
+      "index": 7,
+      "file": "texture_07.png",
+      "width": 128,
+      "height": 64,
+      "rgba_sha256": "252f57293cdc2fb9009ac1d6e8c7e4fd3fd98b89f9c52055d05f84c59fe4cf42",
+      "non_grey_pixels": 8188,
+      "material_names": [
+        "r-00-tex-00",
+        "r-00-tex-00"
+      ]
+    },
+    {
+      "index": 8,
+      "file": "texture_08.png",
+      "width": 128,
+      "height": 64,
+      "rgba_sha256": "08f7de87fa2fa859d57b9bd8e94a5380a885dd7577c7e7a1147e9c6b64c519d7",
+      "non_grey_pixels": 7710,
+      "material_names": [
+        "r-00-kousi-",
+        "r-00-kousi-"
+      ]
+    },
+    {
+      "index": 9,
+      "file": "texture_09.png",
+      "width": 128,
+      "height": 64,
+      "rgba_sha256": "532954de003e5f1bac2bfc6d001143ab7828839d31f253b760f33eb0c5a83f96",
+      "non_grey_pixels": 6973,
+      "material_names": [
+        "r-00-tex-ib"
+      ]
+    },
+    {
+      "index": 10,
+      "file": "texture_10.png",
+      "width": 128,
+      "height": 64,
+      "rgba_sha256": "b2b43309a4464e3531c428157e5f3fbed0d5812de56b95ffc424c32a789c70b6",
+      "non_grey_pixels": 8192,
+      "material_names": [
+        "r-00-tex-tu",
+        "r-00-tex-tu"
+      ]
+    },
+    {
+      "index": 11,
+      "file": "texture_11.png",
+      "width": 256,
+      "height": 256,
+      "rgba_sha256": "318166f3097c7ae62903a9dfcd969f085775818024960bb87e619626f9b45332",
+      "non_grey_pixels": 60391,
+      "material_names": [
+        "r-00-tex-01",
+        "r-00-tex-01"
+      ]
+    },
+    {
+      "index": 12,
+      "file": "texture_12.png",
+      "width": 64,
+      "height": 128,
+      "rgba_sha256": "31f5f9d1d739579f3c64c5d6f120b03710009261c67f698c1c7553575ed1d16a",
+      "non_grey_pixels": 5914,
+      "material_names": [
+        "r-00-tex-00",
+        "r-00-tex-00"
+      ]
+    },
+    {
+      "index": 13,
+      "file": "texture_13.png",
+      "width": 256,
+      "height": 256,
+      "rgba_sha256": "3b0a3a8a4cfedc16773d4d74714743deeadb51a9991e961c817e84812c090135",
+      "non_grey_pixels": 61568,
+      "material_names": [
+        "r-00-tex-01"
+      ]
+    },
+    {
+      "index": 14,
+      "file": "texture_14.png",
+      "width": 128,
+      "height": 128,
+      "rgba_sha256": "9e8ecc99b5de9cde67055ea7df70cf8307220318554a0424fe757fe7e831a423",
+      "non_grey_pixels": 10231,
+      "material_names": [
+        "r-00-tex-02"
+      ]
+    },
+    {
+      "index": 15,
+      "file": "texture_15.png",
+      "width": 128,
+      "height": 128,
+      "rgba_sha256": "c6bc5d32f8869babb18ea6518e5508c51b47a4732f80bc71eee4b61faaa7db9e",
+      "non_grey_pixels": 8179,
+      "material_names": [
+        "r-00-tex-02"
+      ]
+    },
+    {
+      "index": 16,
+      "file": "texture_16.png",
+      "width": 64,
+      "height": 64,
+      "rgba_sha256": "963a04f81e3be233e9655f9f22d5f1db4cf8a8657bbd5c2d579a797c7f65ffe8",
+      "non_grey_pixels": 4096,
+      "material_names": [
+        "r-00-tex-01"
+      ]
+    },
+    {
+      "index": 17,
+      "file": "texture_17.png",
+      "width": 128,
+      "height": 128,
+      "rgba_sha256": "3fb6363e84a9aedc5b36f1e34cee13cd751ac2077a18717e5ba59f3b26ea502d",
+      "non_grey_pixels": 16384,
+      "material_names": [
+        "r-00-tex-01"
+      ]
+    },
+    {
+      "index": 18,
+      "file": "texture_18.png",
+      "width": 128,
+      "height": 128,
+      "rgba_sha256": "1dffba1f4ad73900bfae261c11d42585b056d3bae0984cda9a954e12c3216d92",
+      "non_grey_pixels": 16384,
+      "material_names": [
+        "r-00-tex-si"
+      ]
+    },
+    {
+      "index": 19,
+      "file": "texture_19.png",
+      "width": 256,
+      "height": 256,
+      "rgba_sha256": "8a283362dd448d37669349af1a5acefd8e06ca37d68ea4769e063345e02ed8a2",
+      "non_grey_pixels": 59581,
+      "material_names": [
+        "r-00-tex-01"
+      ]
+    },
+    {
+      "index": 20,
+      "file": "texture_20.png",
+      "width": 128,
+      "height": 64,
+      "rgba_sha256": "7b5bd6330ba33e0f51d7382cc46d7cd65fd763e6f03528780b9109af7cb387d6",
+      "non_grey_pixels": 8192,
+      "material_names": [
+        "r-00-tex-yu"
+      ]
+    },
+    {
+      "index": 21,
+      "file": "texture_21.png",
+      "width": 64,
+      "height": 64,
+      "rgba_sha256": "d5e2a58a49896139f918f0c5183f76d77bcac274bd00ef3d69a1e8cf6c2adaf4",
+      "non_grey_pixels": 1941,
+      "material_names": [
+        "r-00-tex-yu"
+      ]
+    },
+    {
+      "index": 22,
+      "file": "texture_22.png",
+      "width": 128,
+      "height": 64,
+      "rgba_sha256": "2cbd16f6fbb50ce6f5a87f57e8ccd9282c0762b0a8ee07ee95fd3e838c0b4cc6",
+      "non_grey_pixels": 7981,
+      "material_names": [
+        "r-00-tex-yu"
+      ]
+    },
+    {
+      "index": 23,
+      "file": "texture_23.png",
+      "width": 128,
+      "height": 64,
+      "rgba_sha256": "bf0abeda70a98d3bcb8ba8295e791ad21e6369e3634090b49f961bfffb2dd0dc",
+      "non_grey_pixels": 7421,
+      "material_names": [
+        "take.tm2"
+      ]
+    },
+    {
+      "index": 24,
+      "file": "texture_24.png",
+      "width": 256,
+      "height": 128,
+      "rgba_sha256": "7ba5c362b242c9ee7ea3c5944ee434b8b6a5e52e5b93bd6799bafed1ba19e095",
+      "non_grey_pixels": 32767,
+      "material_names": [
+        "syouji.tm2",
+        "syouji.tm2"
+      ]
+    },
+    {
+      "index": 25,
+      "file": "texture_25.png",
+      "width": 256,
+      "height": 128,
+      "rgba_sha256": "9fd830401d6aa84667541d40e15c7fa09ac9de23328678dbb4e694049493528d",
+      "non_grey_pixels": 32668,
+      "material_names": [
+        "syouji-01.t",
+        "syouji-01.t"
+      ]
+    }
+  ],
+  "texture_diagnostics": {
+    "ff1_headerless_gs": [
+      {
+        "decoder": "ff1_structured_tri2",
+        "palette_mode": "colour",
+        "detected_uploads": [
+          {
+            "entry_index": 0,
+            "block": 0,
+            "block_offset": 37808,
+            "category": 10,
+            "tri2_index": 0,
+            "image_offset": 37984,
+            "tbp0": 8960,
+            "tbw": 1,
+            "psm": 0,
+            "dsax": 0,
+            "dsay": 0,
+            "width": 64,
+            "height": 2016,
+            "payload_bytes": 516096
+          },
+          {
+            "entry_index": 0,
+            "block": 0,
+            "block_offset": 37808,
+            "category": 10,
+            "tri2_index": 1,
+            "image_offset": 554192,
+            "tbp0": 10976,
+            "tbw": 1,
+            "psm": 0,
+            "dsax": 0,
+            "dsay": 0,
+            "width": 64,
+            "height": 160,
+            "payload_bytes": 40960
+          }
+        ],
+        "skipped_monochrome_blocks": [
+          {
+            "entry_index": 0,
+            "block_offset": 595344,
+            "category": 13,
+            "reason": "alternative monochrome CLUTs"
+          }
+        ],
+        "decoded_tbp0": [
+          8960,
+          9088,
+          9104,
+          9200,
+          9232,
+          9248,
+          9280,
+          9344,
+          9600,
+          9856,
+          10112,
+          10128,
+          10208,
+          10240,
+          10304,
+          10368,
+          10400,
+          10432,
+          10496,
+          10528,
+          10560,
+          10576,
+          10608,
+          10720,
+          10848,
+          10976
+        ],
+        "decoded_tex0": [
+          "0x200560061d30a300",
+          "0x200560859930a380",
+          "0x200561059d30a390",
+          "0x200562059d30a3f0",
+          "0x200562859930a410",
+          "0x200563059d30a420",
+          "0x20056385d930a440",
+          "0x2005648621312480",
+          "0x2005650621312580",
+          "0x2005658621312680",
+          "0x200566059930a780",
+          "0x20056685dd30a790",
+          "0x200567859d30a7e0",
+          "0x20056805dd30a800",
+          "0x20056885dd30a840",
+          "0x200569059d30a880",
+          "0x200569859d30a8a0",
+          "0x20056a05dd30a8c0",
+          "0x20056a859d30a900",
+          "0x20056b059d30a920",
+          "0x20056b859930a940",
+          "0x20056c059d30a950",
+          "0x20056c859d30a970",
+          "0x20056e05e13129e0",
+          "0x20056e85e1312a60",
+          "0x20056f059d30aae0"
+        ],
+        "warnings": []
+      }
+    ]
+  },
+  "parse_diagnostics": {},
+  "uvs_are_flipped": true,
+  "bone_determinants": [
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0,
+    1.0
+  ],
+  "max_bone_orthogonality_error": 0.0
+}

@@ -1,0 +1,6 @@
+{
+  "url": "http://127.0.0.1:42493/",
+  "console_errors": [],
+  "requests_failed": [],
+  "navigation_error": "Page.goto: net::ERR_BLOCKED_BY_ADMINISTRATOR at http://127.0.0.1:42493/\nCall log:\n  - navigating to \"http://127.0.0.1:42493/\", waiting until \"domcontentloaded\"\n"
+}
