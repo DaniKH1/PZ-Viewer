@@ -218,18 +218,6 @@ python pz_export_cli.py "f:/r1x/man/mdl/m000_miku4.mpx" -f glb,obj -o ./exported
 
 ---
 
-## Known limitations
-
-- Some FF1 PS2 item, door and furniture textures still render grey; this is a
-  separate limitation from the room-lighting and Xbox PKX texture paths.
-- The camera fit has a 25-unit minimum distance, so small FF2 Wii props render
-  small in the viewport.
-- FF1 room surfaces that carry appearance in vertex colors rather than a
-  texture preview without a surface texture; enable **Vertex Colors** to see
-  their stored or baked color.
-
----
-
 ## Project layout
 
 ```
