@@ -12,6 +12,8 @@ browser tab.
 
 ## Current state — read this first
 
+- When setting the paths, MAKE SURE you set it to the folder 3ddata of each game.
+
 - Supports the PS2 releases of Fatal Frame 1–3, Fatal Frame 1 Xbox and Fatal
   Frame 2 Wii, including model viewing, texture inspection and 3D export.
 - Recent parser and viewer improvements include static room lighting,
