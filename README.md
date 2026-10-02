@@ -20,12 +20,11 @@ browser tab.
 - Documentation is grouped by game; see the [documentation index](docs/README.md).
 
 ---
-
 ## Games
 
 | Entry | Games | Containers |
 |---|---|---|
-| **Original** | Fatal Frame 1 (PS2) | `.mdl`, `.pk2`, `.sgd`, `.tim2`, `.mpx` |
+| **Original** | Fatal Frame 1 (PS2) | `.mdl`, `.pk2`, `.sgd`, `.tim2`|
 | | Fatal Frame 2 (PS2) | `.pk2`, `.sgd`, `.tim2`, `.tm2` |
 | | Fatal Frame 3 (PS2) | `.pk4`, `.sgd`, `.tm2` |
 | **Extra** | Fatal Frame 1 XBOX | `.mpx`, `.pkx` |
