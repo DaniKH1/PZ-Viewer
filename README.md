@@ -5,6 +5,9 @@ Project Zero / Fatal Frame assets. Runs in its own native window through
 Microsoft Edge WebView2, renders through WebGL on the GPU, and needs no web
 browser tab.
 
+<img width="1919" height="1023" alt="image" src="https://github.com/user-attachments/assets/e913b78f-a2de-47b2-a2e9-4e09b47daeb8" />
+
+
 ---
 
 ## Current state — read this first
