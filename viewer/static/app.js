@@ -2,29 +2,145 @@
  * PZViewer - GPU Accelerated 3D Engine for Project Zero / Fatal Frame Assets
  */
 
+// Theme support. The active theme is a data-theme attribute on <html>, so
+// switching it only re-points CSS custom properties: no layout, geometry or
+// WebGL state is involved. PZ_THEME_KEY is duplicated by the inline snippet in
+// index.html that applies the stored theme before the first paint, which is
+// what stops a reload from flashing the wrong palette.
+const PZ_THEME_KEY = 'pzviewer.theme';
+// Picker order, 'dynamic' last on purpose: it is a mode rather than a palette,
+// so it belongs after the four concrete choices.
+const PZ_THEMES = ['default', 'ff1', 'ff1x', 'ff2', 'ff2w', 'ff3', 'dynamic'];
+// The theme picker's contents, in the order they are listed. No icons: the list
+// is a list of names, and the picture that stands for each game lives in the
+// top-left corner instead, where it says which game is actually on screen rather
+// than adding a column of decoration to a menu.
+//
+// The icon stays here because this is the one place that knows which picture
+// belongs to which theme. 'img:' marks a file, anything else is a literal emoji,
+// and a theme with neither keeps the viewer's own icon in the corner.
+// FF1 XBOX borrows FF1's camera on purpose: it is the same game on a different
+// machine, and it is meant to look like FF1.
+// The theme-*.png files are the supplied pictures fitted to a square with their
+// backgrounds already removed; they ship only for the games that have one.
+const PZ_THEME_ITEMS = [
+  { id: 'default', label: 'Default', icon: '' },
+  { id: 'ff1', label: 'FF1', icon: 'img:theme-ff1.png' },
+  { id: 'ff1x', label: 'FF1 XBOX', icon: 'img:theme-ff1.png' },
+  { id: 'ff2', label: 'FF2', icon: 'img:theme-ff2.png' },
+  { id: 'ff2w', label: 'FF2 Wii', icon: 'img:theme-ff2w.png' },
+  { id: 'ff3', label: 'FF3', icon: 'img:theme-ff3.png' },
+  { id: 'dynamic', label: 'Dynamic', icon: 'img:app-icon.png' }
+];
+// What the corner shows for a theme with no picture of its own.
+const PZ_FALLBACK_ICON = 'app-icon.png';
+// What the viewer starts on when nothing has been stored yet. Kept apart from
+// PZ_THEMES[0] so the picker order can stay as above while the default is
+// 'dynamic', which paints the palette of the game folder being browsed.
+const PZ_DEFAULT_THEME = 'dynamic';
+// 'dynamic' is a choice, not a palette: it resolves to the theme of whichever
+// game folder the Asset Browser is currently pointed at, so the UI adopts the
+// palette of the game you are actually working on. PZ_DYNAMIC_KEY remembers
+// that folder across reloads so the first paint already resolves correctly.
+const PZ_DYNAMIC_KEY = 'pzviewer.dynamicGame';
+const PZ_DYNAMIC_FALLBACK = 'ff3';
+// Asset Browser rows. "ff2w" is the Wii release of Fatal Frame 2: its models
+// live in .mdlb / .pk2b containers, so it browses a different extension set
+// but reuses the same folder plumbing as the PS2 releases.
+const PZ_GAMES = [
+  { id: 'ff1', label: 'Fatal Frame 1 Files' },
+  { id: 'ff1x', label: 'Fatal Frame 1 XBOX Files' },
+  { id: 'ff2', label: 'Fatal Frame 2 Files' },
+  { id: 'ff2w', label: 'Fatal Frame 2 Wii Files' },
+  { id: 'ff3', label: 'Fatal Frame 3 Files' },
+];
+// The Asset Browser's saved roots, split over two tabs.
+//
+// 'Original' holds the three PS2 releases. 'Extra' holds the two ports, which
+// are kept off the main list on purpose: each is a port of a game that already
+// has a tab, each browses a different container set (.mpx for the FF1 Xbox
+// build, .mdlb / .pk2b for FF2 Wii), and side by side two "Fatal Frame 2" rows
+// with nothing to tell them apart is worse than a second tab. The groups are
+// declared by id rather than by slicing the list above, so the split survives a
+// game being added, removed or renamed.
+const PZ_ROOT_TABS = [
+  { id: 'original', label: 'Original', games: ['ff1', 'ff2', 'ff3'] },
+  { id: 'extra', label: 'Extra', games: ['ff1x', 'ff2w'] }
+];
+const PZ_ROOT_TAB_KEY = 'pzviewer.rootTab';
+const PZ_DEFAULT_ROOT_TAB = 'original';
+const PZ_GAME_IDS = PZ_GAMES.map((g) => g.id);
+// Which theme a game resolves to under Dynamic. The two ports get their own: the
+// Wii release of Fatal Frame 2 has the crimson Butterfly menu where the PS2 build
+// has the amber "Play Data" one, and FF1's Xbox build is the same game with the
+// palette shifted, so it sits next to FF1 rather than replacing it.
+const PZ_GAME_THEME = {
+  ff1: 'ff1', ff1x: 'ff1x', ff2: 'ff2', ff2w: 'ff2w', ff3: 'ff3'
+};
+
+/**
+ * A readable name for one layer group. These formats name their materials
+ * ("m000_sodena", "m001_eye02.tm2"), so that is what a row shows; when the
+ * parser recovered no name, the texture slot is the next most useful thing,
+ * because that is what decides what the surface looks like.
+ */
+/**
+ * The shading looks, as the steps each viewport button cycles through.
+ *
+ * The picker this replaced offered one list of every mode, which meant
+ * remembering which entry held which look. Each button now steps through the
+ * appearances it owns, and whichever button was pressed last is the one in force
+ * -- so exactly one mode is ever on screen.
+ *
+ * The wireframe button has three stops rather than two because wireframing is
+ * only half a decision: 'textured' is its off position, 'wireframe_over' draws
+ * the blue cage on top of the textured model, and 'wireframe' drops the model
+ * and leaves the cage alone. 'wireframe_over' is a second pass -- see
+ * applyShadingMode() -- because one material cannot draw a shaded surface and a
+ * cage over it.
+ */
+const SHADING_STEPS = {
+  textures: ['textured', 'solid'],
+  wireframe: ['textured', 'wireframe_over', 'wireframe'],
+};
+
+function materialName(group) {
+  const material = group.material;
+  if (material && material.name) return material.name;
+  if (material && Number.isInteger(material.texture_index)) {
+    return `Texture ${material.texture_index}`;
+  }
+  if (Number.isInteger(group.texId) && group.texId >= 0) return `Texture ${group.texId}`;
+  return `Material ${group.materialIndex}`;
+}
+
 class PZViewerApp {
   constructor() {
     this.container = document.getElementById('viewport');
     this.currentModelData = null;
-    this.currentAnimData = null;
     this.textures = {};
 
-    this.isPlaying = false;
-    this.isTPose = true;
-    this.currentClipIndex = 0;
-    this.currentFrame = 0;
-    this.totalFrames = 0;
-    this.playbackSpeed = 1.0;
-    this.lastFrameTime = 0;
-    this.baseFps = 30;
-
     this.shadingMode = 'textured';
+    // Vertex colours live outside the shading picker now: they are a modifier on
+    // top of Textures, toggled with V or the button beside the picker.
+    this.vertexColorsOn = false;
     this.exportDestination = '';
-    this.showCollision = false;
     this.showBones = false;
+    this.currentTheme = this.readStoredTheme();
+    // Xbox recolour support: which archive is bound, and the asset it came from.
+    this.currentSourcePath = '';
+    this.xprVariantList = null;
+    this.xprVariantIndex = -1;
+
+    // Layers panel, grouped by material. Rebuilt on every load.
+    this.materialLayerGroups = [];
+    // Which tab of the Asset Browser's saved roots is showing ('original' or
+    // 'extra'); read from storage by initRootTabs().
+    this.currentRootTab = PZ_DEFAULT_ROOT_TAB;
+    // VRAM slot currently enlarged in the lightbox, or null.
+    this.currentTexturePreview = null;
 
     this.initThreeGPU();
-    this.detectGPUInfo();
     this.initUI();
     this.initEventListeners();
     this.restoreGamePaths();
@@ -89,6 +205,11 @@ class PZViewerApp {
     this.scene.add(this.modelGroup);
     this.scene.add(this.bonesGroup);
     this.scene.add(this.collisionGroup);
+    // The wireframe cage drawn over the textured model. Kept apart from
+    // modelGroup so it can be emptied and rebuilt on every look change without
+    // disturbing the layer panel, which indexes into modelGroup's children.
+    this.wireframeGroup = new THREE.Group();
+    this.scene.add(this.wireframeGroup);
 
     window.addEventListener('resize', () => {
       if (!this.container) return;
@@ -98,33 +219,6 @@ class PZViewerApp {
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(w, h);
     });
-  }
-
-  detectGPUInfo() {
-    let gpuRenderer = 'Hardware Accelerated GPU';
-    try {
-      const gl = this.renderer.getContext();
-      if (gl) {
-        const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
-        if (debugInfo) {
-          const raw = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
-          if (raw) {
-            const match = raw.match(/ANGLE \([^,]+,\s*([^,]+?)(?: Direct3D|\))/i);
-            gpuRenderer = (match && match[1]) ? match[1] : raw;
-          }
-        } else {
-          const renderer = gl.getParameter(gl.RENDERER);
-          if (renderer) gpuRenderer = renderer;
-        }
-      }
-    } catch (e) {
-      console.warn('Could not query GPU debug info:', e);
-      gpuRenderer = 'Direct3D / WebGL GPU';
-    }
-    const gpuEl = document.getElementById('gpu-name');
-    if (gpuEl) {
-      gpuEl.textContent = 'GPU: ' + gpuRenderer;
-    }
   }
 
   initUI() {
@@ -176,33 +270,61 @@ class PZViewerApp {
       fileFilter.addEventListener('input', () => this.filterBrowserItems(fileFilter.value));
     }
 
-    const shadingSelect = document.getElementById('select-shading');
-    if (shadingSelect) {
-      shadingSelect.addEventListener('change', (e) => {
-        this.shadingMode = e.target.value;
-        this.applyShadingMode();
-      });
+    const shadeTexturesBtn = document.getElementById('btn-shade-textures');
+    if (shadeTexturesBtn) {
+      shadeTexturesBtn.addEventListener('click', () => this.cycleShadingButton('textures'));
+    }
+    const shadeWireframeBtn = document.getElementById('btn-shade-wireframe');
+    if (shadeWireframeBtn) {
+      shadeWireframeBtn.addEventListener('click', () => this.cycleShadingButton('wireframe'));
     }
 
-    const chkBones = document.getElementById('chk-bones');
-    if (chkBones) {
-      chkBones.addEventListener('change', (e) => {
-        this.showBones = e.target.checked;
-        this.bonesGroup.visible = this.showBones;
-      });
+    const vcolorsBtn = document.getElementById('btn-vcolors');
+    if (vcolorsBtn) {
+      vcolorsBtn.addEventListener('click', () => this.toggleVertexColors());
     }
 
-    const chkCollision = document.getElementById('chk-collision');
-    if (chkCollision) {
-      chkCollision.addEventListener('change', (e) => {
-        this.showCollision = e.target.checked;
-        this.collisionGroup.visible = this.showCollision;
-      });
+    // Texture preview: the backdrop and the button both close it, and Escape is
+    // handled with the other shortcuts.
+    const previewClose = document.getElementById('btn-texture-preview-close');
+    if (previewClose) {
+      previewClose.addEventListener('click', () => this.closeTexturePreview());
     }
+    const previewBackdrop = document.getElementById('texture-preview-backdrop');
+    if (previewBackdrop) {
+      previewBackdrop.addEventListener('click', () => this.closeTexturePreview());
+    }
+
+    const bonesBtn = document.getElementById('btn-bones');
+    if (bonesBtn) {
+      bonesBtn.addEventListener('click', () => this.toggleBones());
+    }
+
+    this.initThemePicker();
+    // The tabs have to exist before restoreGamePaths() asks which tab is active:
+    // that decides which folder the browser opens on load.
+    this.initRootTabs();
 
     const layersModal = document.getElementById('layers-modal');
+    const minimizeBtn = document.getElementById('btn-layers-minimize');
     document.getElementById('btn-mesh-layers')?.addEventListener('click', () => layersModal?.classList.remove('hidden'));
-    document.getElementById('btn-close-layers')?.addEventListener('click', () => layersModal?.classList.add('hidden'));
+    document.getElementById('btn-close-layers')?.addEventListener('click', () => {
+      // Closing resets the minimised state too, so the Layers button always
+      // brings the list back rather than an empty title bar.
+      layersModal?.classList.add('hidden');
+      layersModal?.classList.remove('minimized');
+      if (minimizeBtn) minimizeBtn.textContent = '▾';
+    });
+    // Minimise keeps the panel open but shrinks it to its title bar, so the
+    // material list stops covering the viewport while the model is inspected.
+    if (minimizeBtn) {
+      minimizeBtn.addEventListener('click', () => {
+        const minimized = layersModal.classList.toggle('minimized');
+        minimizeBtn.textContent = minimized ? '▸' : '▾';
+        minimizeBtn.title = minimized ? 'Expand the layers panel' : 'Minimise the layers panel';
+      });
+    }
+    this.initLayersPanelDrag(layersModal);
     document.getElementById('btn-layers-all')?.addEventListener('click', () => this.setAllMeshLayers(true));
     document.getElementById('btn-layers-none')?.addEventListener('click', () => this.setAllMeshLayers(false));
 
@@ -211,80 +333,12 @@ class PZViewerApp {
       resetCam.addEventListener('click', () => this.fitCameraToModel());
     }
 
-    const btnTPose = document.getElementById('btn-t-pose');
-    const btnAnimated = document.getElementById('btn-animated');
-
-    if (btnTPose && btnAnimated) {
-      btnTPose.addEventListener('click', () => {
-        btnTPose.classList.add('active');
-        btnAnimated.classList.remove('active');
-        this.isTPose = true;
-        this.pause();
-        this.resetToTPose();
-      });
-
-      btnAnimated.addEventListener('click', () => {
-        btnAnimated.classList.add('active');
-        btnTPose.classList.remove('active');
-        this.isTPose = false;
-        this.applyAnimationFrame(this.currentFrame);
-      });
-    }
-
-    const btnPlay = document.getElementById('btn-play-pause');
-    if (btnPlay) {
-      btnPlay.addEventListener('click', () => {
-        if (this.isPlaying) {
-          this.pause();
-        } else {
-          if (this.isTPose && btnAnimated) {
-            btnAnimated.click();
-          }
-          this.play();
-        }
-      });
-    }
-
-    const slider = document.getElementById('timeline-slider');
-    if (slider) {
-      slider.addEventListener('input', (e) => {
-        this.pause();
-        if (this.isTPose && btnAnimated) {
-          btnAnimated.click();
-        }
-        this.seekFrame(parseInt(e.target.value));
-      });
-    }
-
-    const speedSelect = document.getElementById('select-speed');
-    if (speedSelect) {
-      speedSelect.addEventListener('change', (e) => {
-        this.playbackSpeed = parseFloat(e.target.value);
-      });
-    }
-
-    const clipSelect = document.getElementById('select-clip');
-    if (clipSelect) {
-      clipSelect.addEventListener('change', (e) => {
-        this.selectClip(parseInt(e.target.value));
-      });
-    }
-
-    const btnLoadAnimation = document.getElementById('btn-load-animation');
-    if (btnLoadAnimation) {
-      btnLoadAnimation.addEventListener('click', () => {
-        const animPath = prompt('Enter path to .bmd animation file:');
-        if (animPath) this.loadAnimation(animPath);
-      });
-    }
-
-    const btnDetachAnimation = document.getElementById('btn-detach-animation');
-    if (btnDetachAnimation) {
-      btnDetachAnimation.addEventListener('click', () => this.detachAnimation());
+    const xprVariant = document.getElementById('btn-xpr-variant');
+    if (xprVariant) {
+      xprVariant.addEventListener('click', () => this.cycleXprVariant());
     }
 
     const btnExportModal = document.getElementById('btn-export-modal');
-    const btnExportCollision = document.getElementById('btn-export-collision');
     const modal = document.getElementById('export-modal');
     const btnModalClose = document.getElementById('btn-modal-close');
     const btnModalCancel = document.getElementById('btn-modal-cancel');
@@ -297,34 +351,11 @@ class PZViewerApp {
           return;
         }
         const modelRadio = document.querySelector('input[name="export-target"][value="model"]');
-        if (modelRadio) {
-          modelRadio.checked = true;
-          this.updateExportTargetUI('model');
-        }
+        if (modelRadio) modelRadio.checked = true;
+        this.updateExportTargetUI();
         modal.classList.remove('hidden');
       });
     }
-
-    if (btnExportCollision && modal) {
-      btnExportCollision.addEventListener('click', () => {
-        if (!this.currentModelData) {
-          this.showToast('No model loaded to export!', 'error');
-          return;
-        }
-        const colRadio = document.querySelector('input[name="export-target"][value="collision"]');
-        if (colRadio) {
-          colRadio.checked = true;
-          this.updateExportTargetUI('collision');
-        }
-        modal.classList.remove('hidden');
-      });
-    }
-
-    document.querySelectorAll('input[name="export-target"]').forEach(r => {
-      r.addEventListener('change', (e) => {
-        this.updateExportTargetUI(e.target.value);
-      });
-    });
 
     const closeModal = () => modal && modal.classList.add('hidden');
     if (btnModalClose) btnModalClose.addEventListener('click', closeModal);
@@ -343,7 +374,9 @@ class PZViewerApp {
           const res = await fetch('/api/export_textures', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ textures: this.currentModelData.textures })
+            body: JSON.stringify({
+              textures: this.currentModelData.textures
+            })
           });
           if (!res.ok) {
             const err = await res.json();
@@ -370,9 +403,154 @@ class PZViewerApp {
     }
   }
 
-  updateExportTargetUI(target) {
-    const modelOpts = document.getElementById('model-options-box');
-    const colOpts = document.getElementById('collision-options-box');
+  /**
+   * Reads the persisted theme name, falling back to the default one. The
+   * attribute itself is already on <html> from the inline <head> snippet, so
+   * this only keeps the picker and the stylesheet in sync.
+   */
+  readStoredTheme() {
+    let stored = '';
+    try {
+      stored = localStorage.getItem(PZ_THEME_KEY) || '';
+    } catch (err) {
+      console.warn('Saved theme could not be read:', err);
+    }
+    return PZ_THEMES.indexOf(stored) !== -1 ? stored : PZ_DEFAULT_THEME;
+  }
+
+  /**
+   * The palette that `data-theme` should actually carry. For every concrete
+   * theme this is the theme itself; for 'dynamic' it is the palette of the
+   * game currently being browsed.
+   */
+  effectiveTheme() {
+    if (this.currentTheme !== 'dynamic') return this.currentTheme;
+    const game = this.currentBrowserGame || this.readDynamicGame();
+    return PZ_GAME_THEME[game] || PZ_DYNAMIC_FALLBACK;
+  }
+
+  readDynamicGame() {
+    try {
+      return localStorage.getItem(PZ_DYNAMIC_KEY) || '';
+    } catch (err) {
+      return '';
+    }
+  }
+
+  /**
+ * The theme picker: a button that opens a list, built from PZ_THEME_ITEMS.
+ *
+ * It was a <select>, which cannot hold the pictures the rows need -- the two
+ * Fatal Frame 2 cameras, or the viewer's own icon for 'dynamic' -- because an
+ * <option> only takes text. Built here rather than in the markup so the list,
+ * the icons and the active check stay in one place with the theme list itself.
+ */
+initThemePicker() {
+    const button = document.getElementById('btn-themes');
+    const menu = document.getElementById('themes-menu');
+    if (!button || !menu) return;
+
+    button.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const open = menu.classList.toggle('hidden');
+      button.setAttribute('aria-expanded', open ? 'false' : 'true');
+      if (!open) this.renderThemeMenu();
+    });
+    // The menu opens from the button, so a click anywhere else closes it.
+    document.addEventListener('click', (e) => {
+      if (menu.contains(e.target) || button.contains(e.target)) return;
+      this.closeThemeMenu();
+    });
+    this.renderThemeMenu();
+  }
+
+  closeThemeMenu() {
+    const menu = document.getElementById('themes-menu');
+    const button = document.getElementById('btn-themes');
+    if (menu) menu.classList.add('hidden');
+    if (button) button.setAttribute('aria-expanded', 'false');
+  }
+
+  renderThemeMenu() {
+    const menu = document.getElementById('themes-menu');
+    if (!menu) return;
+    menu.innerHTML = '';
+    PZ_THEME_ITEMS.forEach((item) => {
+      const row = document.createElement('button');
+      row.type = 'button';
+      row.className = 'theme-row';
+      row.setAttribute('role', 'menuitemradio');
+      row.setAttribute('aria-checked', item.id === this.currentTheme ? 'true' : 'false');
+
+      const label = document.createElement('span');
+      label.textContent = item.label;
+      const check = document.createElement('span');
+      check.className = 'theme-check';
+      check.textContent = item.id === this.currentTheme ? '✔' : '';
+
+      row.append(label, check);
+      row.addEventListener('click', () => {
+        this.applyTheme(item.id);
+        this.closeThemeMenu();
+      });
+      menu.appendChild(row);
+    });
+  }
+
+  /**
+   * The top-left icon: the picture of whichever game is on screen.
+   *
+   * It used to be the viewer's own logo, which says nothing once you are four
+   * folders deep. Under 'dynamic' it follows the browsed game, so the corner
+   * answers "which Fatal Frame am I in" at a glance; under a fixed theme it
+   * follows that theme instead. Themes with no picture of their own fall back
+   * to the logo rather than showing a hole.
+   */
+  updateCornerIcon() {
+    const logo = document.querySelector('.app-logo');
+    if (!logo) return;
+    const item = PZ_THEME_ITEMS.find((entry) => entry.id === this.effectiveTheme());
+    const src = item && item.icon.indexOf('img:') === 0
+      ? item.icon.slice(4)
+      : PZ_FALLBACK_ICON;
+    if (logo.getAttribute('src') !== src) logo.setAttribute('src', src);
+  }
+
+  /**
+   * Swaps the active theme. Only the data-theme attribute changes, so the DOM
+   * is never touched and nothing in the WebGL scene is re-created.
+   */
+  applyTheme(theme) {
+    const next = PZ_THEMES.indexOf(theme) !== -1 ? theme : PZ_DEFAULT_THEME;
+    this.currentTheme = next;
+    document.documentElement.setAttribute('data-theme', this.effectiveTheme());
+    this.updateCornerIcon();
+    this.renderThemeMenu();
+    try {
+      localStorage.setItem(PZ_THEME_KEY, next);
+    } catch (err) {
+      console.warn('Theme could not be saved:', err);
+    }
+  }
+
+  /**
+   * Re-resolves the palette after the browser target changed. Only does
+   * anything while 'dynamic' is the active choice, so picking a folder is free
+   * for every other theme.
+   */
+  syncDynamicTheme() {
+    // The corner icon follows the game as well, which is the whole point of it
+    // being there: browsing a different Fatal Frame changes both the palette
+    // and the picture at once.
+    this.updateCornerIcon();
+    if (this.currentTheme !== 'dynamic') return;
+    const resolved = this.effectiveTheme();
+    if (document.documentElement.getAttribute('data-theme') !== resolved) {
+      document.documentElement.setAttribute('data-theme', resolved);
+    }
+  }
+
+  updateExportTargetUI() {
     const daeLbl = document.getElementById('lbl-fmt-dae');
     const fbxLbl = document.getElementById('lbl-fmt-fbx');
     const titleEl = document.getElementById('export-modal-title');
@@ -392,7 +570,7 @@ class PZViewerApp {
           const data = await res.json();
           if (data.chosen) {
             this.exportDestination = data.chosen;
-            this.updateExportTargetUI(target);
+            this.updateExportTargetUI();
           }
         } catch (err) {
           this.showToast('Folder picker error: ' + err.message, 'error');
@@ -400,47 +578,179 @@ class PZViewerApp {
       });
     }
 
-    if (target === 'collision') {
-      if (modelOpts) modelOpts.classList.add('hidden');
-      if (colOpts) colOpts.classList.remove('hidden');
-      if (daeLbl) daeLbl.classList.add('hidden');
-      if (fbxLbl) fbxLbl.classList.add('hidden');
-      if (titleEl) titleEl.textContent = 'Export 3D Collision Geometry';
-      if (btnDo) btnDo.textContent = 'Export';
-    } else {
-      if (modelOpts) modelOpts.classList.remove('hidden');
-      if (colOpts) colOpts.classList.add('hidden');
-      if (daeLbl) daeLbl.classList.remove('hidden');
-      if (fbxLbl) fbxLbl.classList.remove('hidden');
-      if (titleEl) titleEl.textContent = 'Export 3D Model';
-      if (btnDo) btnDo.textContent = 'Export';
-    }
-    const vertexColorsLabel = document.getElementById('lbl-exp-vcolors');
-    const isRoom = this.currentModelData &&
-      (this.currentModelData.model_type === 'room' || this.currentModelData.type === 'room');
-    if (vertexColorsLabel) vertexColorsLabel.classList.toggle('hidden', !isRoom);
+    // Collision export was removed from the UI: the 2D half-plane data these
+    // builds carry converts into something that is not useful yet, so the radio
+    // is gone rather than left selectable. Model is the only target, which is
+    // why there is nothing to branch on any more. The model-options box stays
+    // hidden too -- it is empty, and unhiding it would show a bare heading.
+    if (daeLbl) daeLbl.classList.remove('hidden');
+    if (fbxLbl) fbxLbl.classList.remove('hidden');
+    if (titleEl) titleEl.textContent = 'Export 3D Model';
+    if (btnDo) btnDo.textContent = 'Export';
   }
 
   initEventListeners() {
+    // The two read-only dialogs. Same wiring as the batch one: open, close by
+    // button, by the backdrop, or by Escape (handled with the other shortcuts).
+    [['btn-credits', 'credits-modal', ['btn-credits-close', 'btn-credits-done']],
+     ['btn-howto', 'howto-modal', ['btn-howto-close', 'btn-howto-done']]
+    ].forEach(([openId, modalId, closeIds]) => {
+      const dialog = document.getElementById(modalId);
+      const open = document.getElementById(openId);
+      const close = () => dialog && dialog.classList.add('hidden');
+      if (open) open.addEventListener('click', () => dialog && dialog.classList.remove('hidden'));
+      closeIds.forEach((id) => {
+        const button = document.getElementById(id);
+        if (button) button.addEventListener('click', close);
+      });
+      const backdrop = dialog && dialog.querySelector('.modal-backdrop');
+      if (backdrop) backdrop.addEventListener('click', close);
+    });
+
+    // The viewport toggles say what they do by changing what they draw, not by
+    // lighting up, so the browser's focus ring is taken off them: it otherwise
+    // sits on whichever was pressed last and reads as a selection the user did
+    // not make.
+    document.querySelectorAll('.viewport-controls button').forEach((button) => {
+      button.addEventListener('mouseup', () => button.blur());
+    });
+
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-      if (e.code === 'Space') {
-        e.preventDefault();
-        const playBtn = document.getElementById('btn-play-pause');
-        if (playBtn) playBtn.click();
-      } else if (e.code === 'KeyF') {
-        this.fitCameraToModel();
-      } else if (e.code === 'KeyT') {
-        const btnT = document.getElementById('btn-t-pose');
-        const btnA = document.getElementById('btn-animated');
-        if (this.isTPose && btnA) btnA.click();
-        else if (!this.isTPose && btnT) btnT.click();
-      } else if (e.code === 'ArrowRight') {
-        this.seekFrame(Math.min(this.totalFrames - 1, this.currentFrame + 1));
-      } else if (e.code === 'ArrowLeft') {
-        this.seekFrame(Math.max(0, this.currentFrame - 1));
+      // Every viewport button carries its shortcut in brackets, and this is the
+      // one place that has to keep up with them.
+      switch (e.code) {
+        case 'KeyF':
+          this.fitCameraToModel();
+          break;
+        case 'KeyT':
+          this.cycleShadingButton('textures');
+          break;
+        case 'KeyW':
+          this.cycleShadingButton('wireframe');
+          break;
+        case 'KeyV':
+          this.toggleVertexColors();
+          break;
+        case 'KeyB':
+          this.toggleBones();
+          break;
+        case 'KeyL':
+          document.getElementById('layers-modal')?.classList.toggle('hidden');
+          break;
+        // The recolour switch: right steps forward, left steps back. The button
+        // only goes one way, so this is the way back.
+        case 'ArrowRight':
+          this.stepXprVariant(1);
+          break;
+        case 'ArrowLeft':
+          this.stepXprVariant(-1);
+          break;
+        case 'Escape':
+          if (this.currentTexturePreview) this.closeTexturePreview();
+          this.closeThemeMenu();
+          // Read-only dialogs first: Escape should close the topmost thing, and
+          // leaving one open while dismissing a preview behind it is not that.
+          ['credits-modal', 'howto-modal'].forEach((id) => {
+            const dialog = document.getElementById(id);
+            if (dialog && !dialog.classList.contains('hidden')) dialog.classList.add('hidden');
+          });
+          break;
+        default:
+          return;
       }
+      // Pressed by keyboard or by mouse: either way the button should not be
+      // left holding focus.
+      const focused = document.activeElement;
+      if (focused && focused.blur) focused.blur();
     });
+  }
+
+  /**
+   * Drag the layers panel around the viewport, by its header.
+   *
+   * It is a floating tool rather than a dialog, so where the user parks it is
+   * their choice -- the material list is long enough that on a small screen it
+   * would otherwise sit over exactly the part of the model being inspected. The
+   * position is remembered, because a panel that jumps back to the corner on
+   * every reload is a panel you move again on every reload.
+   */
+  initLayersPanelDrag(modal) {
+    const panel = modal && modal.querySelector('.layers-modal-content');
+    const header = modal && modal.querySelector('.layers-modal-header');
+    if (!panel || !header) return;
+
+    const clamp = (x, y) => ({
+      x: Math.max(0, Math.min(window.innerWidth - panel.offsetWidth, x)),
+      y: Math.max(0, Math.min(window.innerHeight - panel.offsetHeight, y))
+    });
+
+    // Restored position, and clamped again on restore: the window may be smaller
+    // than it was when the panel was parked, and an off-screen panel cannot be
+    // dragged back because its header is off-screen too.
+    let saved = null;
+    try {
+      const raw = localStorage.getItem('pzviewer.layersPos');
+      if (raw) saved = JSON.parse(raw);
+    } catch (err) {
+      /* storage blocked; the panel still drags, it just starts in the corner */
+    }
+    if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) {
+      const pos = clamp(saved.x, saved.y);
+      panel.style.position = 'absolute';
+      panel.style.left = pos.x + 'px';
+      panel.style.top = pos.y + 'px';
+      panel.style.right = 'auto';
+    }
+
+    let drag = null;
+    header.addEventListener('pointerdown', (event) => {
+      // ✖ and ▾ are buttons: a click that starts on one is that button's.
+      if (event.target.closest('button')) return;
+      const rect = panel.getBoundingClientRect();
+      // Switch from the flex placement to explicit coordinates at the exact
+      // place the panel already is, so the grab does not jump.
+      panel.style.position = 'absolute';
+      panel.style.left = rect.left + 'px';
+      panel.style.top = rect.top + 'px';
+      panel.style.right = 'auto';
+      drag = { dx: event.clientX - rect.left, dy: event.clientY - rect.top };
+      panel.classList.add('dragging');
+      try {
+        header.setPointerCapture(event.pointerId);
+      } catch (err) {
+        /* capture is a nicety; the pointermove on the document still works */
+      }
+      event.preventDefault();
+    });
+
+    header.addEventListener('pointermove', (event) => {
+      if (!drag) return;
+      const pos = clamp(event.clientX - drag.dx, event.clientY - drag.dy);
+      panel.style.left = pos.x + 'px';
+      panel.style.top = pos.y + 'px';
+    });
+
+    const stop = (event) => {
+      if (!drag) return;
+      drag = null;
+      panel.classList.remove('dragging');
+      try {
+        header.releasePointerCapture(event.pointerId);
+      } catch (err) {
+        /* already released */
+      }
+      try {
+        localStorage.setItem('pzviewer.layersPos', JSON.stringify({
+          x: parseFloat(panel.style.left),
+          y: parseFloat(panel.style.top)
+        }));
+      } catch (err) {
+        /* storage blocked; the position just does not survive the reload */
+      }
+    };
+    header.addEventListener('pointerup', stop);
+    header.addEventListener('pointercancel', stop);
   }
 
   async restoreGamePaths() {
@@ -448,7 +758,7 @@ class PZViewerApp {
       const response = await fetch('/api/preferences?_=' + Date.now(), { cache: 'no-store' });
       if (response.ok) {
         const savedPaths = await response.json();
-        ['ff1', 'ff2', 'ff3'].forEach((game) => {
+        PZ_GAME_IDS.forEach((game) => {
           if (savedPaths[game]) {
             localStorage.setItem('pzviewer.' + game + 'Path', savedPaths[game]);
           }
@@ -467,7 +777,14 @@ class PZViewerApp {
     } catch (err) {
       console.warn('Saved folder preferences could not be read:', err);
     }
-    ['ff1', 'ff2', 'ff3'].forEach((game) => {
+    // Which folder the browser opens on load. The active tab's games go first, so
+    // reloading while the Extra tab is showing reopens the Wii folder rather than
+    // jumping back to a PS2 one; the rest of the games are the fallback for when
+    // the active tab has nothing saved yet.
+    const preferred = this.visibleRootGames().map((game) => game.id)
+      .concat(PZ_GAME_IDS.filter((id) =>
+        this.visibleRootGames().every((game) => game.id !== id)));
+    preferred.forEach((game) => {
       const path = savedPaths[game] ||
         localStorage.getItem('pzviewer.' + game + 'Path') || '';
       if (!firstPath && path) {
@@ -484,13 +801,13 @@ class PZViewerApp {
   }
 
   saveGamePath(game, path) {
-    if (game !== 'ff1' && game !== 'ff2' && game !== 'ff3') return;
+    if (PZ_GAME_IDS.indexOf(game) === -1) return;
     const normalizedPath = (path || '').trim();
     if (!normalizedPath) return;
     try {
       localStorage.setItem('pzviewer.' + game + 'Path', normalizedPath);
       const savedPaths = {};
-      ['ff1', 'ff2', 'ff3'].forEach((key) => {
+      PZ_GAME_IDS.forEach((key) => {
         const value = localStorage.getItem('pzviewer.' + key + 'Path');
         if (value) savedPaths[key] = value;
       });
@@ -506,14 +823,72 @@ class PZViewerApp {
     }
   }
 
+  /**
+   * The two tabs over the saved roots, and which one is showing.
+   *
+   * The active tab is remembered because it decides which folders are on screen:
+   * somebody working on the Wii port would otherwise land back on the PS2 roots
+   * on every reload. 'Original' is the default because it is the common case.
+   */
+  initRootTabs() {
+    const host = document.getElementById('root-tabs');
+    if (!host) return;
+    let stored = PZ_DEFAULT_ROOT_TAB;
+    try {
+      stored = localStorage.getItem(PZ_ROOT_TAB_KEY) || PZ_DEFAULT_ROOT_TAB;
+    } catch (err) {
+      /* storage blocked; the default tab is fine */
+    }
+    if (!PZ_ROOT_TABS.some((tab) => tab.id === stored)) stored = PZ_DEFAULT_ROOT_TAB;
+    this.currentRootTab = stored;
+    this.renderRootTabs();
+  }
+
+  renderRootTabs() {
+    const host = document.getElementById('root-tabs');
+    if (!host) return;
+    host.innerHTML = '';
+    PZ_ROOT_TABS.forEach((tab) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'root-tab' + (tab.id === this.currentRootTab ? ' active' : '');
+      button.textContent = tab.label;
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-selected', tab.id === this.currentRootTab ? 'true' : 'false');
+      button.addEventListener('click', () => this.setRootTab(tab.id));
+      host.appendChild(button);
+    });
+  }
+
+  setRootTab(id) {
+    if (!PZ_ROOT_TABS.some((tab) => tab.id === id)) return;
+    this.currentRootTab = id;
+    try {
+      localStorage.setItem(PZ_ROOT_TAB_KEY, id);
+    } catch (err) {
+      /* storage blocked; the tab still switches for this session */
+    }
+    this.renderRootTabs();
+    this.renderSavedRoots();
+  }
+
+  /** The game ids the active tab shows, in the order it shows them. */
+  visibleRootGames() {
+    const tab = PZ_ROOT_TABS.find((t) => t.id === this.currentRootTab);
+    const ids = tab ? tab.games : PZ_GAME_IDS;
+    // Driven off PZ_GAMES so a game whose id is not on any tab is dropped rather
+    // than silently appearing nowhere, and the labels stay in one place.
+    return PZ_GAMES.filter((game) => ids.indexOf(game.id) !== -1);
+  }
+
   renderSavedRoots() {
-    const fileListEl = document.getElementById('file-list');
-    if (!fileListEl) return;
-    fileListEl.innerHTML = '';
-    ['ff1', 'ff2', 'ff3'].forEach((game) => {
+    // #saved-roots, not #file-list: the two used to be the same element, so
+    // redrawing the roots erased the folders of the directory being browsed.
+    const savedRootsEl = document.getElementById('saved-roots');
+    if (!savedRootsEl) return;
+    savedRootsEl.innerHTML = '';
+    this.visibleRootGames().forEach(({ id: game, label: title }) => {
       const path = localStorage.getItem('pzviewer.' + game + 'Path') || '';
-      const title = game === 'ff1' ? 'Fatal Frame 1 Files' :
-        (game === 'ff2' ? 'Fatal Frame 2 Files' : 'Fatal Frame 3 Files');
       const row = document.createElement('div');
       row.className = 'file-item saved-root';
       row.dataset.search = (title + ' ' + path).toLowerCase();
@@ -555,7 +930,7 @@ class PZViewerApp {
         this.renderSavedRoots();
       });
       row.appendChild(clear);
-      fileListEl.appendChild(row);
+      savedRootsEl.appendChild(row);
       if (path) this.checkSavedRoot(row, path, game);
     });
   }
@@ -595,8 +970,14 @@ class PZViewerApp {
     if (game === 'all' && this.currentBrowserGame) {
       game = this.currentBrowserGame;
     }
-    if (game === 'ff1' || game === 'ff2' || game === 'ff3') {
+    if (PZ_GAME_IDS.indexOf(game) !== -1) {
       this.currentBrowserGame = game;
+      try {
+        localStorage.setItem(PZ_DYNAMIC_KEY, game);
+      } catch (err) {
+        /* storage blocked; the in-memory value still drives the theme */
+      }
+      this.syncDynamicTheme();
     }
     fileListEl.innerHTML = '<div class="loading-hint">Reading directory...</div>';
 
@@ -637,7 +1018,7 @@ class PZViewerApp {
           const row = document.createElement('div');
           row.className = 'file-item ' + (item.is_dir ? 'dir' : 'file-' + item.type);
           row.dataset.search = (item.name + ' ' + item.type).toLowerCase();
-          const iconMap = { sgd_pack: '🧩', sgd: '📄', bmd: '🎬', cld: '🛡️', tm2: '🖼️', tim2: '🖼️', png: '🖼️', pk2: '📦', pk4: '📦' };
+          const iconMap = { sgd_pack: '🧩', mdl: '🧍', mpk: '📦', sgd: '📄', cld: '🛡️', tm2: '🖼️', tim2: '🖼️', png: '🖼️', pk2: '📦', pk4: '📦' };
           const icon = item.is_dir ? '📁' : (iconMap[item.type] || '📄');
           const size = item.is_dir ? 'folder' : this.formatFileSize(item.size);
           row.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' +
@@ -653,7 +1034,13 @@ class PZViewerApp {
           fileListEl.appendChild(row);
         });
       } else {
-        fileListEl.innerHTML = '<div class="loading-hint">No compatible 3D files found</div>';
+        // An empty folder is a dead end: the message says so and the tree offers
+        // the way out as a row of its own, the same shape as the one shown above
+        // a populated folder, rather than as a button that looks like it belongs
+        // to the app. At a configured root there is no parent to offer -- the
+        // browser will not navigate above it -- so the message stands alone.
+        fileListEl.innerHTML = '';
+        fileListEl.appendChild(this.buildEmptyFolderNotice(data, game));
       }
     } catch (e) {
       this.renderSavedRoots();
@@ -663,6 +1050,35 @@ class PZViewerApp {
       error.textContent = 'Error: ' + e.message;
       fileListEl.appendChild(error);
     }
+  }
+
+  /**
+   * The listing shown when a folder holds nothing this game can open: the
+   * message, plus a "... (Parent Folder)" row when there is a parent to go back
+   * to. The row is built like the one above a populated folder so the tree has
+   * one way of saying "up" rather than two.
+   */
+  buildEmptyFolderNotice(data, game) {
+    const notice = document.createElement('div');
+    notice.className = 'empty-folder';
+
+    // The way out comes first, in the same position it occupies above a
+    // populated folder: the tree keeps one place for "up", and when there is
+    // nothing else to click that is the first thing worth pressing.
+    if (data.parent_dir && data.parent_dir !== data.current_dir) {
+      const upRow = document.createElement('div');
+      upRow.className = 'file-item dir';
+      upRow.style.fontWeight = 'bold';
+      upRow.innerHTML = '<span>📁</span> <span>... (Parent Folder)</span>';
+      upRow.addEventListener('click', () => this.browseDir(data.parent_dir, game));
+      notice.appendChild(upRow);
+    }
+
+    const message = document.createElement('div');
+    message.className = 'loading-hint';
+    message.textContent = 'No compatible 3D files found';
+    notice.appendChild(message);
+    return notice;
   }
 
   filterBrowserItems(query) {
@@ -691,6 +1107,78 @@ class PZViewerApp {
     if (overlay) overlay.classList.remove('active');
   }
 
+  /**
+   * Shows the recolour button only for the asset that has variants.
+   *
+   * m000_spe5.mpx and m000_spe6.mpx are byte-for-byte identical to
+   * m000_miku4.mpx, so m000_miku4/spe5/spe6.xpr are three colourways of one
+   * piece of geometry. Only that kind of asset gets a switch: the server sends
+   * `xpr_variant_switch` when a model has more than one palette, so anything
+   * else -- including a plain PS2 model -- leaves the button hidden rather than
+   * offering to switch to geometry that is not what was clicked.
+   */
+  syncXprVariantButton(data, activeXpr) {
+    const button = document.getElementById('btn-xpr-variant');
+    const label = document.getElementById('xpr-variant-name');
+    if (!button) return;
+    const variants = (data && data.xpr_variants) || [];
+    // The server decides: it only sets this flag for a model that really has
+    // more than one palette. Matching on the file name here was fragile -- the
+    // payload's `filename` comes without its extension -- so the rule lives in
+    // one place instead of being re-guessed in the browser.
+    if (!(data && data.xpr_variant_switch) || variants.length < 2) {
+      this.hideXprVariantButton(true);
+      return;
+    }
+    this.xprVariantList = variants;
+    // The server reports the bound archive separately, so the cycle order stays
+    // fixed no matter which variant is on screen.
+    const active = (data && data.xpr_active) || activeXpr || variants[0];
+    this.xprVariantIndex = variants.findIndex(
+      (v) => v.toLowerCase() === String(active).toLowerCase());
+    if (this.xprVariantIndex < 0) this.xprVariantIndex = 0;
+    if (label) label.textContent = variants[this.xprVariantIndex];
+    button.title = 'Recolour archives for this geometry: ' + variants.join(', ') +
+      ' — click for the next one';
+    button.classList.remove('hidden');
+  }
+
+  hideXprVariantButton(forget) {
+    const button = document.getElementById('btn-xpr-variant');
+    if (button) button.classList.add('hidden');
+    // Only drop the cycle when the asset really is not one of these: hiding the
+    // button while its own load is in flight must not make the next click a
+    // no-op, which is what clearing the list here used to do.
+    if (forget) {
+      this.xprVariantList = null;
+      this.xprVariantIndex = -1;
+    }
+  }
+
+  cycleXprVariant() {
+    return this.stepXprVariant(1);
+  }
+
+  /**
+   * Moves the recolour switch by `delta` places, wrapping at both ends.
+   *
+   * Both directions are on the keyboard as well as on the button: the button
+   * cycles one way only, so a left arrow is the only way back to the previous
+   * colourway without going all the way round. Does nothing when the asset on
+   * screen has no recolour archives, which is the same rule the button follows
+   * by not being there at all.
+   */
+  stepXprVariant(delta) {
+    if (!this.xprVariantList || !this.currentSourcePath) return;
+    const total = this.xprVariantList.length;
+    // The index is -1 until a model with variants has been loaded; starting it
+    // from 0 means the first press lands on the first archive rather than
+    // jumping past it.
+    const current = this.xprVariantIndex < 0 ? 0 : this.xprVariantIndex;
+    const next = (current + delta + total * 2) % total;
+    this.loadFile(this.currentSourcePath, this.xprVariantList[next]);
+  }
+
   showToast(msg, type) {
     const toast = document.getElementById('toast');
     if (!toast) return;
@@ -701,42 +1189,47 @@ class PZViewerApp {
     }, 3500);
   }
 
-  async loadFile(filePath) {
+  async loadFile(filePath, xprName) {
     const fn = filePath.split('/').pop();
+    // Hidden up front, not only when the answer arrives: a load that fails
+    // returns early without reaching syncXprVariantButton, and the button would
+    // otherwise stay on screen describing the previous model. The cycle list is
+    // kept so a click during this load still works.
+    this.hideXprVariantButton(false);
     this.showLoading('Loading ' + fn + ' into GPU VRAM...');
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 90000);
     try {
-      const res = await fetch('/api/load?path=' + encodeURIComponent(filePath) +
-        '&_=' + Date.now(), {
-          cache: 'no-store',
-          signal: controller.signal
-        });
+      let url = '/api/load?path=' + encodeURIComponent(filePath) +
+        '&game=' + encodeURIComponent(this.currentBrowserGame || '') +
+        '&_=' + Date.now();
+      if (xprName) url += '&xpr=' + encodeURIComponent(xprName);
+      const res = await fetch(url, {
+        cache: 'no-store',
+        signal: controller.signal
+      });
       const data = await res.json();
       if (data.error) {
+        this.hideXprVariantButton(true);
         this.showToast('Error: ' + data.error, 'error');
         return;
       }
 
       this.currentModelData = data;
-      this.buildMeshLayers(data);
+      this.currentSourcePath = filePath;
+      this.syncXprVariantButton(data, xprName);
 
-      // Shading mode defaults to textured for all model types (rooms, characters, props)
-      const shadingSelect = document.getElementById('select-shading');
+      // Shading defaults to textured for all model types (rooms, characters, props)
       this.shadingMode = 'textured';
-      if (shadingSelect) shadingSelect.value = 'textured';
+      // A new asset starts without vertex colours, or the previous one's toggle
+      // would follow the user into a model that has no colours to show.
+      this.vertexColorsOn = false;
 
       this.buildGPUScene(data);
+      // After the scene, not before: the panel binds each row to the objects that
+      // draw the material, and those objects do not exist until the scene is built.
+      this.buildMeshLayers(data);
       this.updateStatsUI(data);
-
-      const animPanel = document.getElementById('anim-panel');
-      if (data.animations && data.animations.length > 0) {
-        this.setupAnimations(data.animations);
-        if (animPanel) animPanel.classList.remove('hidden');
-      } else {
-        this.setupAnimations([]);
-        if (animPanel) animPanel.classList.add('hidden');
-      }
 
       this.fitCameraToModel();
       this.showToast('Loaded ' + data.filename + ' on GPU successfully!', 'success');
@@ -754,47 +1247,54 @@ class PZViewerApp {
     }
   }
 
-  async loadAnimation(animPath) {
-    this.showLoading('Loading Animation Keyframes...');
-    try {
-      const res = await fetch('/api/load_anim?path=' + encodeURIComponent(animPath));
-      const data = await res.json();
-      if (data.error) {
-        this.showToast(data.error, 'error');
-        return;
-      }
-      this.setupAnimations(data.animations);
-      const animPanel = document.getElementById('anim-panel');
-      if (animPanel) animPanel.classList.remove('hidden');
-      this.showToast('Loaded ' + data.animations.length + ' animation clips!', 'success');
-    } catch (err) {
-      this.showToast(err.message, 'error');
-    } finally {
-      this.hideLoading();
-    }
-  }
+  /**
+   * Reproduces the three alpha passes the reference MDLB renderer uses:
+   *
+   *   1. opaque texture        -> no alpha test, no blending
+   *   2. texture with cutout   -> hard alpha test at 0.5, depth writes left on so
+   *                              discarded fragments cannot occlude
+   *   3. soft masked material  -> low alpha test plus blending
+   *
+   * The previous version set `transparent` for any texture with an alpha
+   * channel and `alphaTest: 0`, which both let fully transparent texels
+   * composite over the model *and* switched depth writing off. Without depth
+   * writes three.js sorts the surfaces per object instead of per depth, so
+   * interior geometry drew over the outside of the character: that read as the
+   * body "clipping" through itself.
+   *
+   * Rooms use the same three passes. Room alpha is a real mask, not baked GS
+   * colour data: the shadow sheets in rre01 are textures with zero fully opaque
+   * pixels that 23-25 meshes sample (tex19 is 45% cutout / 55% soft), and they
+   * need genuine blending or they render as solid blocks on the floor. Forcing
+   * rooms opaque was a wrong guess and it is what made those shadows opaque.
+   */
+  getTextureAlphaSettings(map, isRoomAsset = false) {
+    const userData = map && map.userData ? map.userData : {};
+    const alphaMin = Number.isFinite(userData.alphaMin) ? userData.alphaMin : 255;
+    const alphaMax = Number.isFinite(userData.alphaMax) ? userData.alphaMax : 255;
+    const opaque = !userData.hasAlpha || alphaMin >= 255;
 
-  async detachAnimation() {
-    try {
-      await fetch('/api/detach_anim', { method: 'POST' });
-      this.setupAnimations([]);
-      this.resetToTPose();
-      const btnT = document.getElementById('btn-t-pose');
-      const btnA = document.getElementById('btn-animated');
-      if (btnT && btnA) {
-        btnT.classList.add('active');
-        btnA.classList.remove('active');
-      }
-      this.isTPose = true;
-      this.showToast('Animation detached. Pure T-Pose active.', 'info');
-    } catch (e) {
-      console.error(e);
+    if (opaque) {
+      // Pass 1: fully opaque surface, no test and no blending.
+      return { transparent: false, alphaTest: 0, depthWrite: true };
     }
+    if (alphaMax >= 255) {
+      // Pass 2: binary cutout (lace, hair edges). Discard instead of blending
+      // and keep depth writes, which is what makes the cutout read clean.
+      return { transparent: false, alphaTest: 0.5, depthWrite: true };
+    }
+    // Pass 3: genuinely soft mask, so blend. depthWrite stays off here because
+    // blended surfaces must not occlude what is drawn after them.
+    return { transparent: true, alphaTest: 0.2, depthWrite: false };
   }
 
   buildGPUScene(data) {
     const isRoomAsset = data.model_type === 'room' || data.type === 'room';
     const textureFlipY = data.uvs_flipped ? false : true;
+    // FF2 Wii ships small atlases that get magnified over whole surfaces;
+    // nearest sampling turns them into hard texel blocks. The TIM2 games keep
+    // nearest so their pixel art stays crisp.
+    const magFilter = data.texture_mag_linear ? THREE.LinearFilter : THREE.NearestFilter;
     while (this.modelGroup.children.length) {
       const obj = this.modelGroup.children[0];
       if (obj.geometry) obj.geometry.dispose();
@@ -839,10 +1339,15 @@ class PZViewerApp {
           threeTex.colorSpace = THREE.SRGBColorSpace;
           threeTex.wrapS = THREE.RepeatWrapping;
           threeTex.wrapT = THREE.RepeatWrapping;
-          threeTex.magFilter = THREE.NearestFilter;
+          threeTex.magFilter = magFilter;
           threeTex.minFilter = THREE.LinearMipmapLinearFilter;
           threeTex.generateMipmaps = true;
-          threeTex.userData = { hasAlpha: !!tex.has_alpha };
+          threeTex.userData = {
+            hasAlpha: !!tex.has_alpha,
+            alphaMin: Number.isFinite(tex.alpha_min) ? tex.alpha_min : 255,
+            alphaMax: Number.isFinite(tex.alpha_max) ? tex.alpha_max : 255,
+            sourceTextureIndex: idx
+          };
           threeTex.needsUpdate = true;
           this.textures[idx] = threeTex;
         }
@@ -906,7 +1411,13 @@ class PZViewerApp {
 
           const tex = this.textures[meshData.tex_id];
           const isRoom = isRoomAsset;
-          const meshSide = isRoom ? THREE.FrontSide : THREE.DoubleSide;
+          // Backface culling everywhere. These files wind their triangles
+          // consistently, and drawing the far side of every surface doubles the
+          // fill cost for a layer that is never meant to be seen -- on a
+          // single-sided room sheet it also let the interior bleed through the
+          // walls. The collision solids are the exception: they are translucent
+          // volumes meant to be read from any angle, so they keep DoubleSide.
+          const meshSide = THREE.FrontSide;
           // Room textures use the alpha channel as baked GS color data in
           // some assets; only prop/character materials use it for cutouts.
           const hasAlpha = !!(tex && tex.userData && tex.userData.hasAlpha);
@@ -915,13 +1426,9 @@ class PZViewerApp {
             map: tex || null,
             // Parsed FF1 room color buffers can be zero-filled; multiplying
             // a recovered texture by them makes the whole room black.
-            vertexColors: !tex && hasColors,
+            vertexColors: this.vertexColorsOn && hasColors,
             side: meshSide,
-            transparent: false,
-            // Room GS textures can use alpha as baked data rather than a
-            // cutout mask; alpha testing them makes dark room overlays vanish.
-            alphaTest: !isRoom && hasAlpha ? 0.5 : 0,
-            depthWrite: true,
+            ...this.getTextureAlphaSettings(tex, isRoomAsset),
             opacity: 1,
             ...(MaterialClass === THREE.MeshStandardMaterial ? {
               roughness: 0.82,
@@ -933,9 +1440,15 @@ class PZViewerApp {
           threeMesh.name = meshData.name || ('submesh_' + mIdx);
           const textureIndex = Number.isInteger(meshData.tex_id) ? meshData.tex_id : -1;
           threeMesh.userData = {
+            // Stamped rather than assumed: a malformed submesh is skipped by the
+            // catch below, so a child's position in modelGroup.children is not
+            // its index in the payload. Whatever maps payload entries onto scene
+            // objects (the layers panel) goes through this instead.
+            meshIndex: mIdx,
             hasTexture: !!tex,
             textureIndex: textureIndex,
             hasColors: hasColors,
+            texturedVertexColors: this.vertexColorsOn && hasColors,
             originalMat: mat,
             boneIndex: meshData.bone_index || 0
           };
@@ -971,11 +1484,8 @@ class PZViewerApp {
         (data.collision.polygons && data.collision.polygons.length > 0) ||
         (data.collision.spheres && data.collision.spheres.length > 0);
       if (hasCollision && this.currentModelData && this.currentModelData.model_type === 'collision') {
-        this.showCollision = true;
         this.collisionGroup.visible = true;
         this.modelGroup.visible = true;
-        const chkCollision = document.getElementById('chk-collision');
-        if (chkCollision) chkCollision.checked = true;
       }
     }
 
@@ -990,15 +1500,26 @@ class PZViewerApp {
   }
 
   buildBonesVisualizer(bones) {
-    const sphereGeom = new THREE.SphereGeometry(1.6, 8, 8);
-    const sphereMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+    // The rig is an overlay, not part of the model: it sits mostly *inside* the
+    // body, so with the depth test on it vanished behind the mesh exactly where
+    // it is most wanted. depthTest off plus a late renderOrder draws it last and
+    // untested, so the skeleton reads through the character. The depth buffer is
+    // left alone so the overlay cannot smear into whatever draws next.
+    const sphereGeom = new THREE.SphereGeometry(0.45, 8, 8);
+    const sphereMat = new THREE.MeshBasicMaterial({
+      color: 0x38bdf8,
+      depthTest: false,
+      depthWrite: false
+    });
 
     this.boneNodes = [];
+    const nodesById = new Map();
     const linePositions = [];
 
     bones.forEach((b) => {
       const marker = new THREE.Mesh(sphereGeom, sphereMat);
       marker.position.set(b.pos[0], b.pos[1], b.pos[2]);
+      marker.renderOrder = 999;
       this.bonesGroup.add(marker);
 
       this.boneNodes.push({
@@ -1008,19 +1529,27 @@ class PZViewerApp {
         restPos: [...b.pos],
         restRot: [...b.rot]
       });
+      nodesById.set(b.id, this.boneNodes[this.boneNodes.length - 1]);
+    });
 
-      if (b.parent >= 0 && b.parent < bones.length) {
-        const p = bones[b.parent];
-        linePositions.push(b.pos[0], b.pos[1], b.pos[2]);
-        linePositions.push(p.pos[0], p.pos[1], p.pos[2]);
+    this.boneNodes.forEach((node) => {
+      const parent = nodesById.get(node.parent);
+      if (parent) {
+        linePositions.push(node.restPos[0], node.restPos[1], node.restPos[2]);
+        linePositions.push(parent.restPos[0], parent.restPos[1], parent.restPos[2]);
       }
     });
 
     if (linePositions.length > 0) {
       this.boneLineGeom = new THREE.BufferGeometry();
       this.boneLineGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(linePositions), 3));
-      const lineMat = new THREE.LineBasicMaterial({ color: 0x0284c7 });
+      const lineMat = new THREE.LineBasicMaterial({
+        color: 0x0284c7,
+        depthTest: false,
+        depthWrite: false
+      });
       this.boneLinesMesh = new THREE.LineSegments(this.boneLineGeom, lineMat);
+      this.boneLinesMesh.renderOrder = 999;
       this.bonesGroup.add(this.boneLinesMesh);
     }
   }
@@ -1102,197 +1631,245 @@ class PZViewerApp {
     }
   }
 
-  applyShadingMode() {
-    this.modelGroup.traverse(child => {
-      if (child.isMesh && child.userData) {
-        const ud = child.userData;
-        const isRoom = this.currentModelData &&
-          (this.currentModelData.model_type === 'room' || this.currentModelData.type === 'room');
-
-        switch (this.shadingMode) {
-          case 'textured':
-            const TexturedMaterial = isRoom && ud.hasTexture
-              ? THREE.MeshBasicMaterial
-              : THREE.MeshStandardMaterial;
-            child.material = new TexturedMaterial({
-              map: ud.hasTexture ? child.material.map || ud.originalMat.map : null,
-              // Texture-less room meshes still carry their baked appearance in vertex colors.
-              vertexColors: !ud.hasTexture && ud.hasColors,
-              side: isRoom ? THREE.FrontSide : THREE.DoubleSide,
-              transparent: false,
-              alphaTest: ud.hasTexture && child.material.map && child.material.map.userData?.hasAlpha ? 0.5 : 0,
-              depthWrite: true,
-              ...(TexturedMaterial === THREE.MeshStandardMaterial ? {
-                roughness: 0.82,
-                metalness: 0.08
-              } : {})
-            });
-            break;
-
-          case 'textured_vertex':
-            child.material = new THREE.MeshStandardMaterial({
-              map: ud.hasTexture ? child.material.map || ud.originalMat.map : null,
-              // Three.js multiplies the sampled texture by COLOR_0 when both
-              // are enabled.  Keep this mode distinct from plain Textures.
-              vertexColors: ud.hasColors,
-              side: isRoom ? THREE.FrontSide : THREE.DoubleSide,
-              transparent: false,
-              alphaTest: ud.hasTexture && child.material.map && child.material.map.userData?.hasAlpha ? 0.5 : 0,
-              depthWrite: true,
-              roughness: 0.82,
-              metalness: 0.08
-            });
-            break;
-
-          case 'vcolors':
-            child.material = new THREE.MeshBasicMaterial({
-              vertexColors: ud.hasColors,
-              color: ud.hasColors ? 0xffffff : 0x888888,
-              side: isRoom ? THREE.FrontSide : THREE.DoubleSide
-            });
-            break;
-
-          case 'wireframe':
-            child.material = new THREE.MeshBasicMaterial({
-              color: 0x38bdf8,
-              wireframe: true
-            });
-            break;
-
-          case 'solid':
-            child.material = new THREE.MeshStandardMaterial({
-              color: 0xdddddd,
-              roughness: 0.6,
-              metalness: 0.1,
-              side: isRoom ? THREE.FrontSide : THREE.DoubleSide
-            });
-            break;
-        }
-      }
-    });
+  /**
+   * Vertex colours on or off, as a modifier on the textured looks.
+   *
+   * These used to be two entries in the shading picker ("Textures + Vertex
+   * Color" and "Vertex Colors (Rooms)"), so the answer to "I want the colours"
+   * depended on which entry you remembered. They are now a flag on the textured
+   * looks rather than modes of their own, so the two shading buttons keep
+   * meaning what they say, and this is a plain on/off.
+   */
+  toggleVertexColors() {
+    this.vertexColorsOn = !this.vertexColorsOn;
+    this.applyShadingMode();
   }
 
+  /**
+   * Cycles one of the two shading buttons through the two looks it owns.
+   *
+   * Exactly one mode is ever in force: the button that was pressed last owns the
+   * viewport, and the other one goes inactive. That is why the two lists exist
+   * instead of one list of four -- each button answers "what does this look
+   * like" without the user having to remember which entry it was.
+   */
+  cycleShadingButton(which) {
+    const steps = SHADING_STEPS[which];
+    if (!steps) return;
+    const current = steps.indexOf(this.shadingMode);
+    // Not in this button's list (the other one had it): start at its first stop.
+    const next = current === -1 ? steps[0] : steps[(current + 1) % steps.length];
+    this.shadingMode = next;
+    this.applyShadingMode();
+  }
+
+  toggleBones() {
+    this.showBones = !this.showBones;
+    this.bonesGroup.visible = this.showBones;
+  }
+
+  applyShadingMode() {
+    // The wireframe cage is a second set of meshes sharing the model's
+    // geometries, so it has to be torn down and rebuilt whenever the look
+    // changes rather than toggled.
+    this.wireframeGroup.clear();
+    const overlayMeshes = [];
+
+    this.modelGroup.traverse(child => {
+      if (!child.isMesh || !child.userData) return;
+      const ud = child.userData;
+      const isRoom = this.currentModelData &&
+        (this.currentModelData.model_type === 'room' || this.currentModelData.type === 'room');
+      const map = ud.hasTexture ? (child.material.map || ud.originalMat.map) : null;
+      // Vertex colours are a modifier on the textured looks, not a mode of their
+      // own, so the two shading buttons keep their meaning. Texture-less room
+      // meshes are the exception: their baked colours are the only thing they
+      // have, so they always show them.
+      const useVertexColors = ud.hasColors && (map ? this.vertexColorsOn : true);
+
+      switch (this.shadingMode) {
+        case 'solid':
+          child.material = new THREE.MeshStandardMaterial({
+            color: 0xdddddd,
+            roughness: 0.6,
+            metalness: 0.1,
+            side: THREE.FrontSide
+          });
+          break;
+
+        case 'wireframe':
+          child.material = new THREE.MeshBasicMaterial({
+            color: 0x38bdf8,
+            wireframe: true,
+            side: THREE.FrontSide
+          });
+          break;
+
+        // 'wireframe_over' keeps the textured model exactly as 'textured' draws
+        // it and stacks a cage over it, which one material cannot do; the cage
+        // is collected below and added once the loop is done.
+        case 'wireframe_over':
+        case 'textured':
+        default: {
+          const TexturedMaterial = isRoom && map
+            ? THREE.MeshBasicMaterial
+            : THREE.MeshStandardMaterial;
+          child.material = new TexturedMaterial({
+            map: map,
+            // Three.js multiplies the sampled texture by COLOR_0 when both are
+            // enabled; the default white base colour keeps the vertex colours
+            // the only multiplier besides the texture itself.
+            color: 0xffffff,
+            vertexColors: useVertexColors,
+            side: THREE.FrontSide,
+            ...this.getTextureAlphaSettings(map, isRoom),
+            ...(TexturedMaterial === THREE.MeshStandardMaterial ? {
+              roughness: 0.82,
+              metalness: 0.08
+            } : {})
+          });
+          break;
+        }
+      }
+
+      if (this.shadingMode === 'wireframe_over') overlayMeshes.push(child);
+    });
+
+    if (overlayMeshes.length > 0) {
+      // One material for the whole cage: it is a diagnostic overlay, not part of
+      // the asset, so it gets no per-mesh state. Sharing the geometry means no
+      // extra memory for the positions, and depthTest off plus a high renderOrder
+      // is what puts the lines in front of the surface instead of inside it.
+      const overlayMaterial = new THREE.MeshBasicMaterial({
+        color: 0x38bdf8,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.9,
+        depthTest: false,
+        depthWrite: false
+      });
+      overlayMeshes.forEach((mesh) => {
+        const cage = new THREE.Mesh(mesh.geometry, overlayMaterial);
+        cage.renderOrder = 998;
+        cage.frustumCulled = false;
+        this.wireframeGroup.add(cage);
+      });
+    }
+  }
+
+  /**
+   * The layers panel, grouped by material rather than by submesh.
+   *
+   * A character is a hundred-odd submeshes drawn with a few dozen materials, and
+   * what is worth switching on and off is the material -- a face, a sleeve, a
+   * whole piece of set dressing -- not the strips each one is cut into. The
+   * payloads carry real material names ("m000_sodena", "m001_eye02.tm2"), so the
+   * rows read as what they draw rather than as "submesh_47".
+   */
   buildMeshLayers(data) {
     const panel = document.getElementById('mesh-layers');
     if (!panel) return;
     panel.innerHTML = '';
-    (data.meshes || []).forEach((meshData, index) => {
-      const label = document.createElement('label');
-      label.className = 'mesh-layer-row';
+    const meshes = data.meshes || [];
+    const materials = data.materials || [];
+
+    // Payload mesh index -> the object that draws it. The scene builder stamps
+    // the index on each mesh because a malformed submesh is skipped, so
+    // positions in modelGroup.children do not line up with the payload.
+    const objectForMesh = new Map();
+    this.modelGroup.children.forEach((child) => {
+      const meshIndex = child.userData && child.userData.meshIndex;
+      if (Number.isInteger(meshIndex)) objectForMesh.set(meshIndex, child);
+    });
+
+    const groups = [];
+    const byLook = new Map();
+    meshes.forEach((meshData, meshIndex) => {
+      const materialIndex = Number.isInteger(meshData.material_index) ? meshData.material_index : -1;
+      const material = materials[materialIndex] || null;
+      const texId = material ? material.texture_index : (meshData.tex_id ?? -1);
+      // Grouped by what the row actually switches -- a name and the texture it
+      // draws -- rather than by the material slot. These files repeat both:
+      // m001_mafuyu holds nine materials named "m001_mafuyu" that differ only in
+      // which body page they point at, so keying on the name alone would hide
+      // real differences, while keying on the slot alone would list four
+      // identical "m001_hair01" rows. Name plus texture slot collapses exactly
+      // the duplicates and nothing that looks different: 33 rows become 23 for
+      // m001_mafuyu, 40 become 31 for m000_miku.
+      const key = materialIndex >= 0
+        ? `mat:${material && material.name ? material.name : materialIndex}:${texId}`
+        : `tex:${texId}`;
+      let group = byLook.get(key);
+      if (!group) {
+        group = { materialIndex, material, texId, meshIndices: [] };
+        byLook.set(key, group);
+        groups.push(group);
+      }
+      group.meshIndices.push(meshIndex);
+    });
+
+    if (groups.length === 0) {
+      panel.innerHTML = '<span class="muted">No material layers.</span>';
+      return;
+    }
+
+    // Count how often each name is reused first: these formats repeat the same
+    // name across materials that differ only in their texture slot, and the
+    // label has to say which one is which or the rows are indistinguishable.
+    const nameUse = new Map();
+    groups.forEach((group) => {
+      const name = materialName(group);
+      nameUse.set(name, (nameUse.get(name) || 0) + 1);
+    });
+
+    // A repeated name is numbered by which one it is rather than by the VRAM
+    // slot it draws: "r-00-tex-01 ·2" is a row, "r-00-tex-01 · tex 17" is a
+    // sentence. The slot it names goes to the tooltip, where there is room for
+    // it and where it is actually wanted.
+    const seen = new Map();
+
+    groups.forEach((group) => {
+      const row = document.createElement('label');
+      row.className = 'mesh-layer-row';
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
       checkbox.checked = true;
-      checkbox.addEventListener('change', () => {
-        const mesh = this.modelGroup.children[index];
-        if (mesh) mesh.visible = checkbox.checked;
-      });
+      const objects = group.meshIndices
+        .map((meshIndex) => objectForMesh.get(meshIndex))
+        .filter(Boolean);
+      const setVisible = (visible) => { objects.forEach((obj) => { obj.visible = visible; }); };
+      checkbox.addEventListener('change', () => setVisible(checkbox.checked));
+
+      const name = materialName(group);
+      let suffix = '';
+      if (nameUse.get(name) > 1) {
+        const occurrence = (seen.get(name) || 0) + 1;
+        seen.set(name, occurrence);
+        suffix = ` ·${occurrence}`;
+      }
+      const count = group.meshIndices.length;
       const text = document.createElement('span');
-      text.textContent = meshData.name || `Mesh ${index + 1}`;
-      label.append(checkbox, text);
-      panel.appendChild(label);
+      // Just the material name. The submesh count and the VRAM slot it draws are
+      // still there, in the tooltip -- on screen they were noise on every row.
+      text.textContent = `${name}${suffix}`;
+      const slot = group.material ? group.material.texture_index : group.texId;
+      row.title = `${count} submesh(es) · VRAM tex ${slot}` +
+        (nameUse.get(name) > 1 ? '' : ' · only material with this name');
+      row.append(checkbox, text);
+      panel.appendChild(row);
+
+      // Remembered so a future "hide all / show all" and any other batch
+      // visibility change can go through the same grouping.
+      group.objects = objects;
+      group.setVisible = setVisible;
     });
-    if (!data.meshes || data.meshes.length === 0) {
-      panel.innerHTML = '<span class="muted">No mesh layers.</span>';
-    }
+
+    this.materialLayerGroups = groups;
   }
 
   setAllMeshLayers(visible) {
     this.modelGroup.children.forEach(mesh => { mesh.visible = visible; });
     document.querySelectorAll('#mesh-layers input[type="checkbox"]').forEach(box => { box.checked = visible; });
-  }
-
-  setupAnimations(clips) {
-    const clipSelect = document.getElementById('select-clip');
-    if (!clipSelect) return;
-
-    clipSelect.innerHTML = '';
-    this.currentAnimData = clips;
-
-    if (!clips || clips.length === 0) {
-      clipSelect.innerHTML = '<option value="-1">No Animations</option>';
-      this.totalFrames = 0;
-      this.updateTimelineUI();
-      return;
-    }
-
-    clips.forEach((clip, idx) => {
-      const opt = document.createElement('option');
-      opt.value = idx;
-      opt.textContent = clip.name + ' (' + clip.num_frames + 'f)';
-      clipSelect.appendChild(opt);
-    });
-
-    this.selectClip(0);
-  }
-
-  selectClip(index) {
-    if (!this.currentAnimData || index < 0 || index >= this.currentAnimData.length) return;
-    this.currentClipIndex = index;
-    const clip = this.currentAnimData[index];
-    this.totalFrames = clip.num_frames;
-    this.currentFrame = 0;
-    this.updateTimelineUI();
-
-    if (!this.isTPose) {
-      this.applyAnimationFrame(0);
-    }
-  }
-
-  updateTimelineUI() {
-    const slider = document.getElementById('timeline-slider');
-    const counter = document.getElementById('frame-counter');
-    if (slider) {
-      slider.max = Math.max(0, this.totalFrames - 1);
-      slider.value = this.currentFrame;
-    }
-    if (counter) {
-      counter.textContent = 'Frame: ' + this.currentFrame + ' / ' + this.totalFrames;
-    }
-  }
-
-  play() {
-    if (this.totalFrames <= 0) return;
-    this.isPlaying = true;
-    const playBtn = document.getElementById('btn-play-pause');
-    if (playBtn) playBtn.textContent = '⏸️';
-  }
-
-  pause() {
-    this.isPlaying = false;
-    const playBtn = document.getElementById('btn-play-pause');
-    if (playBtn) playBtn.textContent = '▶️';
-  }
-
-  seekFrame(frame) {
-    this.currentFrame = frame;
-    this.updateTimelineUI();
-    if (!this.isTPose) {
-      this.applyAnimationFrame(frame);
-    }
-  }
-
-  resetToTPose() {
-    if (!this.boneNodes) return;
-    const linePositions = [];
-    this.boneNodes.forEach(bn => {
-      bn.mesh.position.set(bn.restPos[0], bn.restPos[1], bn.restPos[2]);
-      bn.mesh.rotation.set(bn.restRot[0], bn.restRot[1], bn.restRot[2]);
-      if (bn.parent >= 0 && bn.parent < this.boneNodes.length) {
-        const p = this.boneNodes[bn.parent];
-        linePositions.push(bn.restPos[0], bn.restPos[1], bn.restPos[2]);
-        linePositions.push(p.restPos[0], p.restPos[1], p.restPos[2]);
-      }
-    });
-    if (this.boneLineGeom && linePositions.length > 0) {
-      this.boneLineGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(linePositions), 3));
-      this.boneLineGeom.attributes.position.needsUpdate = true;
-    }
-  }
-
-  applyAnimationFrame(frame) {
-    // BMD transform decoding is still experimental; keep the model in its
-    // known rest pose until the track-to-bone mapping is validated.
-    this.resetToTPose();
   }
 
   updateStatsUI(data) {
@@ -1309,21 +1886,93 @@ class PZViewerApp {
     setVal('stat-bones', data.stats ? data.stats.bones : '0');
     setVal('stat-textures', data.stats ? data.stats.textures : '0');
 
+    // Which internal name each VRAM page goes by. The parsers carry the name on
+    // the material rather than on the image ("m001_sodena", "m001_eye02.tm2"),
+    // so the page's name is the name of the materials that draw it. Several
+    // materials can share a page, and several pages can share a name (the
+    // character's body is nine pages all called "m001_mafuyu"), so this is a
+    // page -> names lookup and nothing more.
+    const namesBySlot = new Map();
+    (data.materials || []).forEach((mat) => {
+      if (!Number.isInteger(mat.texture_index) || !mat.name) return;
+      if (!namesBySlot.has(mat.texture_index)) namesBySlot.set(mat.texture_index, new Set());
+      namesBySlot.get(mat.texture_index).add(mat.name);
+    });
+    this.textureNamesBySlot = namesBySlot;
+
     const texGrid = document.getElementById('texture-grid');
     if (texGrid) {
       texGrid.innerHTML = '';
       if (data.textures && data.textures.length > 0) {
+        this.closeTexturePreview();
         data.textures.forEach((tex, idx) => {
-          const card = document.createElement('div');
+          // A real <button>, so it is reachable by keyboard and announces
+          // itself; the card is the square slot in the grid.
+          const card = document.createElement('button');
+          card.type = 'button';
           card.className = 'texture-card';
-          card.title = 'VRAM Tex ' + idx + ' (' + tex.width + 'x' + tex.height + ')';
-          card.innerHTML = '<img src="' + tex.data_uri + '" alt="Tex ' + idx + '" /><div class="texture-card-label">' + tex.width + 'x' + tex.height + '</div>';
+          const name = this.textureNameForSlot(idx);
+          card.title = (name ? name + ' · ' : '') + 'VRAM Tex ' + idx +
+            ' (' + tex.width + 'x' + tex.height + ') — click to enlarge';
+          card.innerHTML = '<img src="' + tex.data_uri + '" alt="Texture ' + idx +
+            ' (' + tex.width + ' by ' + tex.height + ')" /><div class="texture-card-label">' +
+            tex.width + 'x' + tex.height + '</div>';
+          card.addEventListener('click', () => this.openTexturePreview(idx, tex));
           texGrid.appendChild(card);
         });
       } else {
         texGrid.innerHTML = '<div style="color: var(--text-muted); font-size: 10px;">No textures in VRAM</div>';
       }
     }
+  }
+
+  /**
+   * The internal name the asset itself gives a VRAM page, or '' when the
+   * parsers recovered no name for it. Several materials can share a page and
+   * can carry different names, so the names are joined rather than one of them
+   * being picked arbitrarily.
+   */
+  textureNameForSlot(index) {
+    const names = this.textureNamesBySlot && this.textureNamesBySlot.get(index);
+    return names ? [...names].join(' / ') : '';
+  }
+
+  /**
+   * One decoded texture at full size, over a backdrop that dims the rest of the
+   * tool. The slot grid stays at thumbnail size because a 32x128 sheet is
+   * unreadable in it, and decoding these again for a second grid would double
+   * the memory for no reason -- so the preview reuses the data URI the card
+   * already holds.
+   */
+  openTexturePreview(index, tex) {
+    const overlay = document.getElementById('texture-preview');
+    const image = document.getElementById('texture-preview-image');
+    const title = document.getElementById('texture-preview-title');
+    const meta = document.getElementById('texture-preview-meta');
+    if (!overlay || !image) return;
+    image.src = tex.data_uri;
+    // Titled by the name the asset gives the page, not by its slot number: the
+    // slot only says where it sits in VRAM, the name says what it is. The slot
+    // moves to the subtitle so it is still on screen.
+    const name = this.textureNameForSlot(index);
+    image.alt = (name ? name + ', ' : '') + 'VRAM texture ' + index +
+      ', ' + tex.width + ' by ' + tex.height + ' pixels';
+    if (title) title.textContent = name || 'Texture ' + index;
+    if (meta) meta.textContent = tex.width + ' × ' + tex.height + ' px · VRAM ' + index;
+    overlay.classList.remove('hidden');
+    this.currentTexturePreview = index;
+    const close = document.getElementById('btn-texture-preview-close');
+    if (close) close.focus();
+  }
+
+  closeTexturePreview() {
+    const overlay = document.getElementById('texture-preview');
+    if (!overlay) return;
+    overlay.classList.add('hidden');
+    this.currentTexturePreview = null;
+    const image = document.getElementById('texture-preview-image');
+    // Drops the decoded bitmap instead of leaving it attached to the document.
+    if (image) image.removeAttribute('src');
   }
 
   fitCameraToModel() {
@@ -1350,9 +1999,34 @@ class PZViewerApp {
     let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.6;
     cameraZ = Math.max(cameraZ, 25);
 
-    this.camera.near = Math.max(maxDim / 100000, 0.01);
-    this.camera.far = Math.max(60000, maxDim * 20);
+    // Scale the depth range to the model instead of using the fixed 0.5..60000
+    // from the constructor. For a ~170 unit character that old range gave a
+    // 1:120000 near/far ratio, so the depth buffer ran out of precision and
+    // coplanar surfaces (body against clothing, hair against face) z-fought.
+    // The reference MDLB renderer derives both planes from the bounding sphere
+    // and the orbit distance for the same reason; the ratio stays small because
+    // the near plane only ever reaches the closest visible geometry.
+    const radius = Math.max(size.length() * 0.5, maxDim * 0.5, 1e-4);
+    const reach = radius * 1.15 + 0.05;
+    const farPlane = Math.max(reach * 1.5, cameraZ + reach);
+    const nearPlane = cameraZ > reach
+      ? Math.max(0.002, (cameraZ - reach) * 0.5)
+      : Math.max(0.002, farPlane * 0.0005);
+    this.camera.near = nearPlane;
+    this.camera.far = farPlane;
+    // Remembered so updateDepthRange() can retune the planes as the user orbits.
+    this.modelRadius = radius;
     this.camera.updateProjectionMatrix();
+    // Kill the orbit inertia before moving, not after. With damping on, the
+    // controls keep a leftover rotation delta that update() applies and then
+    // decays, so resetting the camera mid-drag left it drifting for a second or
+    // two afterwards. One update with damping off consumes the whole delta and
+    // leaves none behind, and it happens before the new position is set so the
+    // consumed throwaway does not move the camera being placed.
+    const damping = this.controls.enableDamping;
+    this.controls.enableDamping = false;
+    this.controls.update();
+    this.controls.enableDamping = damping;
     this.camera.position.set(center.x, center.y + maxDim * 0.35, center.z + cameraZ);
     this.controls.target.copy(center);
     this.camera.lookAt(center);
@@ -1367,10 +2041,6 @@ class PZViewerApp {
 
     const fmtRadio = document.querySelector('input[name="export-fmt"]:checked');
     const format = fmtRadio ? fmtRadio.value : 'glb';
-    const isRoom = this.currentModelData.model_type === 'room' || this.currentModelData.type === 'room';
-    const includeColors = isRoom && (document.getElementById('exp-vcolors')?.checked ?? true);
-    const includeTextures = document.getElementById('exp-textures')?.checked ?? true;
-    const tposeOnly = document.getElementById('exp-tpose')?.checked ?? true;
     const statusEl = document.getElementById('export-status');
 
     const label = target === 'collision' ? 'Collision' : 'Model';
@@ -1378,13 +2048,18 @@ class PZViewerApp {
     if (statusEl) statusEl.textContent = 'Generating 3D ' + label.toLowerCase() + ' file...';
 
     try {
+      // Vertex colours and texture extraction are no longer options: rooms and
+      // props always carry their colours out, and every model writes its PNGs
+      // next to itself. T-pose was the opposite case -- it mangled the animation
+      // rig for anyone who wanted the bind pose and was never wanted by anyone
+      // who did not -- so it is simply off now instead of on by default.
       const body = {
         target: target,
         format: format,
-        include_colors: includeColors,
-        include_textures: includeTextures,
-        include_collision: true,
-        tpose_only: tposeOnly,
+        include_colors: true,
+        include_textures: true,
+        include_collision: false,
+        tpose_only: false,
         destination: this.exportDestination || ''
       };
 
@@ -1421,7 +2096,7 @@ class PZViewerApp {
       if (modal) modal.classList.add('hidden');
 
       this.exportDestination = '';
-      this.updateExportTargetUI(target);
+      this.updateExportTargetUI();
       this.showToast('Saved ' + filename + ' to downloads!', 'success');
     } catch (err) {
       this.showToast('Export error: ' + err.message, 'error');
@@ -1430,27 +2105,279 @@ class PZViewerApp {
     }
   }
 
-  animate(time) {
+  /**
+   * Keep the depth range tight around the model as the orbit distance changes.
+   * The reference renderer recomputes both planes every frame for this reason:
+   * a near plane far in front of the geometry wastes depth precision, and a far
+   * plane far past it makes z-fighting visible on close-up body surfaces.
+   */
+  updateDepthRange() {
+    if (!this.modelRadius || !Number.isFinite(this.modelRadius)) return;
+    const distance = this.camera.position.distanceTo(this.controls.target);
+    if (!Number.isFinite(distance)) return;
+    const reach = this.modelRadius * 1.15 + 0.05;
+    const far = Math.max(reach * 1.5, distance + reach);
+    const near = distance > reach
+      ? Math.max(0.002, (distance - reach) * 0.5)
+      : Math.max(0.002, far * 0.0005);
+    if (near === this.camera.near && far === this.camera.far) return;
+    this.camera.near = near;
+    this.camera.far = far;
+    this.camera.updateProjectionMatrix();
+  }
+
+  animate() {
     requestAnimationFrame(this.animate);
 
-    if (this.isPlaying && this.totalFrames > 0 && !this.isTPose) {
-      if (!this.lastFrameTime) this.lastFrameTime = time;
-      const delta = (time - this.lastFrameTime) / 1000;
-      const interval = (1 / (this.baseFps * this.playbackSpeed));
-
-      if (delta >= interval) {
-        this.currentFrame = (this.currentFrame + 1) % this.totalFrames;
-        this.updateTimelineUI();
-        this.applyAnimationFrame(this.currentFrame);
-        this.lastFrameTime = time;
-      }
-    }
-
     this.controls.update();
+    this.updateDepthRange();
     this.renderer.render(this.scene, this.camera);
   }
 }
 
+
 window.addEventListener('DOMContentLoaded', () => {
   window.pzApp = new PZViewerApp();
+  window.batchManager = new BatchManager(window.pzApp);
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Batch Convert Manager
+// ─────────────────────────────────────────────────────────────────────────────
+class BatchManager {
+  constructor(app) {
+    this.app = app;
+    this.jobId = null;
+    this.pollTimer = null;
+    this.logEntries = [];
+    this.init();
+  }
+
+  init() {
+    const modal       = document.getElementById('batch-modal');
+    const btnOpen     = document.getElementById('btn-batch-modal');
+    const btnClose    = document.getElementById('btn-batch-close');
+    const btnCancel   = document.getElementById('btn-batch-modal-cancel');
+    const btnStart    = document.getElementById('btn-batch-start');
+    const btnStop     = document.getElementById('btn-batch-cancel-job');
+    const btnNew      = document.getElementById('btn-batch-new');
+    const btnSrc      = document.getElementById('btn-batch-pick-source');
+    const btnOut      = document.getElementById('btn-batch-pick-output');
+    const btnCurrent  = document.getElementById('btn-batch-use-current');
+
+    const close = () => modal && modal.classList.add('hidden');
+
+    if (btnOpen)   btnOpen.addEventListener('click',  () => modal.classList.remove('hidden'));
+    if (btnClose)  btnClose.addEventListener('click',  close);
+    if (btnCancel) btnCancel.addEventListener('click', close);
+    if (modal) modal.querySelector('.modal-backdrop')?.addEventListener('click', close);
+
+    if (btnStart) btnStart.addEventListener('click', () => this.startBatch());
+    if (btnStop)  btnStop.addEventListener('click',  () => this.cancelBatch());
+    if (btnNew)   btnNew.addEventListener('click',   () => this.resetToForm());
+
+    // Folder pickers
+    if (btnSrc) {
+      btnSrc.addEventListener('click', async () => {
+        const dir = document.getElementById('batch-source-dir').value;
+        const chosen = await this.pickFolder(dir);
+        if (chosen) document.getElementById('batch-source-dir').value = chosen;
+      });
+    }
+    if (btnOut) {
+      btnOut.addEventListener('click', async () => {
+        const dir = document.getElementById('batch-output-dir').value;
+        const chosen = await this.pickFolder(dir);
+        if (chosen) document.getElementById('batch-output-dir').value = chosen;
+      });
+    }
+
+    // "Use Current Browser Folder" — reads app's current browsing directory
+    if (btnCurrent) {
+      btnCurrent.addEventListener('click', () => {
+        const curDir = document.getElementById('input-dir')?.value || '';
+        if (curDir) {
+          document.getElementById('batch-source-dir').value = curDir;
+        } else {
+          this.app.showToast('Navigate to a folder in the browser first.', 'error');
+        }
+      });
+    }
+  }
+
+  async pickFolder(initialDir) {
+    try {
+      const res = await fetch('/api/choose_folder?dir=' + encodeURIComponent(initialDir || ''));
+      const data = await res.json();
+      return data.chosen || '';
+    } catch (e) {
+      this.app.showToast('Folder picker error: ' + e.message, 'error');
+      return '';
+    }
+  }
+
+  async startBatch() {
+    const sourceDir = document.getElementById('batch-source-dir').value.trim();
+    const outputDir = document.getElementById('batch-output-dir').value.trim();
+    const fmt = document.querySelector('input[name="batch-fmt"]:checked')?.value || 'glb';
+    const recursive     = document.getElementById('batch-recursive').checked;
+    const incTextures   = document.getElementById('batch-textures').checked;
+    const incColors     = document.getElementById('batch-colors').checked;
+    const mirror        = document.getElementById('batch-mirror').checked;
+    const conflict      = document.getElementById('batch-conflict').value;
+
+    if (!sourceDir) {
+      this.app.showToast('Please choose a source folder first.', 'error');
+      return;
+    }
+
+    this.showProgress();
+    this.logEntries = [];
+
+    try {
+      const res = await fetch('/api/batch_export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_dir:       sourceDir,
+          output_dir:       outputDir,
+          format:           fmt,
+          recursive:        recursive,
+          include_textures: incTextures,
+          include_colors:   incColors,
+          tpose_only:       false,
+          mirror_structure: mirror,
+          conflict:         conflict,
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || 'Failed to start batch');
+      }
+
+      this.jobId = data.job_id;
+      this.startPolling();
+
+    } catch (err) {
+      this.resetToForm();
+      this.app.showToast('Batch error: ' + err.message, 'error');
+    }
+  }
+
+  startPolling() {
+    if (this.pollTimer) clearInterval(this.pollTimer);
+    this.pollTimer = setInterval(() => this.pollStatus(), 1200);
+  }
+
+  async pollStatus() {
+    if (!this.jobId) return;
+    try {
+      const res = await fetch(`/api/batch_status?job=${this.jobId}`);
+      if (!res.ok) return;
+      const job = await res.json();
+      this.updateProgress(job);
+      if (job.status !== 'running') {
+        clearInterval(this.pollTimer);
+        this.pollTimer = null;
+        this.onBatchDone(job);
+      }
+    } catch (e) {
+      // network hiccup — keep polling
+    }
+  }
+
+  updateProgress(job) {
+    const total = job.total || 0;
+    const done  = job.done  || 0;
+    const pct   = total > 0 ? Math.min(100, Math.round(done / total * 100)) : 0;
+
+    const label = document.getElementById('batch-progress-label');
+    const count = document.getElementById('batch-progress-count');
+    const bar   = document.getElementById('batch-progress-bar');
+    const logEl = document.getElementById('batch-log');
+
+    if (label) label.textContent = job.current ? `Processing: ${job.current}` : 'Running...';
+    if (count) count.textContent = total > 0 ? `${done} / ${total} (${job.failed || 0} errors)` : '';
+    if (bar)   bar.style.width = pct + '%';
+
+    // Append new log lines
+    if (logEl && job.log) {
+      const newEntries = job.log.slice(this.logEntries.length);
+      newEntries.forEach(entry => {
+        this.logEntries.push(entry);
+        const line = document.createElement('div');
+        const cls = entry.startsWith('✓') ? 'log-ok' : entry.startsWith('⏭') ? 'log-skip' : entry.startsWith('✗') ? 'log-err' : '';
+        if (cls) line.className = cls;
+        line.textContent = entry;
+        logEl.appendChild(line);
+      });
+      if (newEntries.length > 0) logEl.scrollTop = logEl.scrollHeight;
+    }
+  }
+
+  onBatchDone(job) {
+    const done    = job.done    || 0;
+    const failed  = job.failed  || 0;
+    const skipped = job.skipped || 0;
+    const ok      = done - failed - skipped;
+
+    const msgEl  = document.getElementById('batch-done-msg');
+    const detail = document.getElementById('batch-done-detail');
+    const link   = document.getElementById('batch-output-link');
+    const label  = document.getElementById('batch-progress-label');
+    const bar    = document.getElementById('batch-progress-bar');
+
+    if (label) label.textContent = job.status === 'cancelled' ? '⏹ Batch cancelled.' : '✅ Batch complete!';
+    if (bar)   { bar.style.width = '100%'; bar.style.background = failed > 0 ? '#ef4444' : '#4ade80'; }
+
+    // Update stop/new buttons
+    document.getElementById('btn-batch-cancel-job')?.classList.add('hidden');
+    document.getElementById('btn-batch-new')?.classList.remove('hidden');
+
+    if (msgEl) msgEl.classList.remove('hidden');
+    if (detail) detail.textContent = ` Converted: ${ok}, Skipped: ${skipped}, Errors: ${failed}.`;
+    if (link && job.output_dir) {
+      link.textContent = `📂 Output: ${job.output_dir}`;
+      link.href = '#';
+      link.onclick = (e) => { e.preventDefault(); navigator.clipboard?.writeText(job.output_dir); };
+    }
+  }
+
+  async cancelBatch() {
+    if (!this.jobId) return;
+    try {
+      await fetch('/api/batch_cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_id: this.jobId })
+      });
+    } catch (e) { /* ignore */ }
+  }
+
+  showProgress() {
+    document.getElementById('batch-setup-form')?.classList.add('hidden');
+    document.getElementById('batch-progress-view')?.classList.remove('hidden');
+    document.getElementById('btn-batch-start')?.classList.add('hidden');
+    document.getElementById('btn-batch-cancel-job')?.classList.remove('hidden');
+    document.getElementById('btn-batch-new')?.classList.add('hidden');
+    document.getElementById('batch-done-msg')?.classList.add('hidden');
+    document.getElementById('batch-log').innerHTML = '';
+    document.getElementById('batch-progress-bar').style.width = '0%';
+    document.getElementById('batch-progress-bar').style.background = 'linear-gradient(90deg, #6366f1, #38bdf8)';
+    document.getElementById('batch-progress-label').textContent = 'Scanning files...';
+    document.getElementById('batch-progress-count').textContent = '';
+  }
+
+  resetToForm() {
+    if (this.pollTimer) { clearInterval(this.pollTimer); this.pollTimer = null; }
+    this.jobId = null;
+    this.logEntries = [];
+    document.getElementById('batch-setup-form')?.classList.remove('hidden');
+    document.getElementById('batch-progress-view')?.classList.add('hidden');
+    document.getElementById('btn-batch-start')?.classList.remove('hidden');
+    document.getElementById('btn-batch-cancel-job')?.classList.add('hidden');
+    document.getElementById('btn-batch-new')?.classList.add('hidden');
+  }
+}

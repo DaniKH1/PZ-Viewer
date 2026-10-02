@@ -156,7 +156,8 @@ class GSVram:
         self.uploads.append((dbp, dpsm, dsax, dsay, width, height))
         return True
 
-    def image(self, tbp0, tbw, psm, tw, th, cbp=0, csa=0):
+    def image(self, tbp0, tbw, psm, tw, th, cbp=0, csa=0,
+              preserve_zero_alpha=False):
         width, height = 1 << tw, 1 << th
         if (width > MAX_TRANSFER_DIMENSION or height > MAX_TRANSFER_DIMENSION
                 or width * height > MAX_IMAGE_PIXELS):
@@ -202,7 +203,7 @@ class GSVram:
         # Some FF1 room uploads leave the alpha byte unset for an otherwise
         # valid opaque palette. Do not turn that entire image invisible;
         # preserve mixed/real alpha images unchanged.
-        if raw_alpha_max == 0:
+        if raw_alpha_max == 0 and not preserve_zero_alpha:
             out.putalpha(255)
         return out
 
@@ -280,7 +281,8 @@ def _iter_tri2_records(data, start, end):
         pos = next_pos
 
 
-def reconstruct_sgd_textures(data, materials, diagnostics=None):
+def reconstruct_sgd_textures(data, materials, diagnostics=None,
+                             preserve_zero_alpha=False):
     """Upload structured FF1 GS records and return exact TBP0 images.
 
     FF1 PK2 texture payloads are headerless GS IMAGE uploads.  Their format
@@ -334,7 +336,10 @@ def reconstruct_sgd_textures(data, materials, diagnostics=None):
         csa = (tex0 >> 56) & 0x1f
         image_key = (tbp0, tbw, psm, tw, th, cbp, csa)
         if image_key not in image_cache:
-            image_cache[image_key] = vram.image(tbp0, tbw, psm, tw, th, cbp, csa)
+            image_cache[image_key] = vram.image(
+                tbp0, tbw, psm, tw, th, cbp, csa,
+                preserve_zero_alpha=preserve_zero_alpha,
+            )
         image = image_cache[image_key]
         if image:
             result[tbp0] = image

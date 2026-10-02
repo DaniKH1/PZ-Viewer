@@ -18,8 +18,9 @@ def main():
 
     url = f"http://127.0.0.1:{port}"
     print("=" * 65)
-    print("  PROJECT ZERO 3 - 3D VIEWER & EXTRACTOR (GPU)")
+    print("  PROJECT ZERO / FATAL FRAME - 3D VIEWER & EXTRACTOR")
     print("=" * 65)
+    print("  Supported games: Fatal Frame 1, Fatal Frame 2, Project Zero 3")
     print("  Mode: Native Desktop GUI Application")
     print(f"  Local Engine Address: {url}")
     print("  Rendering Pipeline: Hardware GPU Accelerated (VBO / Direct3D)")
@@ -45,7 +46,7 @@ def main():
         import webview
         print("Launching Desktop GUI Window (DirectX / GPU Accelerated) ...")
         window = webview.create_window(
-            title="Project Zero 3 - 3D Viewer & Extractor (GPU)",
+            title="Project Zero / Fatal Frame - 3D Viewer & Extractor",
             url=url,
             width=1400,
             height=880,

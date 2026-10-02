@@ -69,6 +69,67 @@ def transform_norm(n, mat):
         return [tx/l, ty/l, tz/l]
     return [tx, ty, tz]
 
+def strip_matrix_scale(matrix):
+    """Normalise the three basis rows of a bone matrix, keeping translation.
+
+    Ported from ``StripCoordinateScale`` in
+    Obscura-ff1/ModelConverter/game/Model.cpp:33.  FF1 PS2 character
+    ``SGDCOORDINATE.matCoord`` rows all carry the same spurious uniform scale
+    (about 1.919 on real files), which Obscura removes before using a matrix
+    as a world transform.  FF3 matrices are already unit length, so this is
+    only enabled by the FF1 entry point.
+    """
+    if not matrix or len(matrix) < 16:
+        return matrix
+    out = list(matrix)
+    for base in (0, 4, 8):
+        length = math.sqrt(out[base] ** 2 + out[base + 1] ** 2 + out[base + 2] ** 2)
+        if length > 1e-6:
+            out[base] /= length
+            out[base + 1] /= length
+            out[base + 2] /= length
+    return out
+
+def face_along_positive_z(model):
+    """Turn a model to face +Z, the direction every other game here is stored.
+
+    The FF1 characters come out of the files looking down -Z in both builds: the
+    PS2 ``.mdl`` set and the Xbox ``.mpx`` set are the same geometry with the
+    opposite Z orientation, measured by taking the mean Z of the head vertices
+    whose texture is skin tone (-1.65 for the Xbox MPX, +1.65 for the same
+    character already turned). Loading the .mpx from the default +Z camera
+    therefore shows the back of the head.
+
+    This is a 180-degree turn about Y, not a mirror: negating Z alone would have
+    a negative determinant and turn the character inside out. Negating X and Z
+    together is exactly that rotation. Obscura never had to deal with it -- it
+    exports FF1 with ``aiProcess_ValidateDataStructure | aiProcess_EmbedTextures``
+    and no ``aiProcess_MakeLeftHanded`` (Model.cpp:733), so it hands the -Z
+    orientation straight through to Blender.
+    """
+    for mesh in getattr(model, "meshes", []):
+        mesh.positions = [[-p[0], p[1], -p[2]] for p in mesh.positions]
+        if getattr(mesh, "normals", None):
+            mesh.normals = [[-n[0], n[1], -n[2]] for n in mesh.normals]
+    for bone in getattr(model, "bones", []):
+        matrix = getattr(bone, "matrix", None)
+        if matrix is not None and len(matrix) >= 16:
+            matrix = list(matrix)
+            # Rows 0 and 2 of the basis carry X and Z; negating them and the
+            # translation is the left-multiplication by diag(-1, 1, -1).
+            matrix[0] = -matrix[0]
+            matrix[1] = -matrix[1]
+            matrix[8] = -matrix[8]
+            matrix[9] = -matrix[9]
+            matrix[12] = -matrix[12]
+            matrix[14] = -matrix[14]
+            bone.matrix = matrix
+        trans = getattr(bone, "trans", None)
+        if trans and len(trans) >= 3:
+            bone.trans = [-trans[0], trans[1], -trans[2]]
+    return model
+
+
 def normalize_mesh_normals(model):
     for mesh in model.meshes:
         normalized = []
@@ -172,7 +233,8 @@ def apply_lighting_to_vertex(pos, normal, lights):
 
     return [min(1.0, max(0.0, cr)), min(1.0, max(0.0, cg)), min(1.0, max(0.0, cb)), 1.0]
 
-def parse_sgd(data, name="sgd", lit_data=None, external_bones=None):
+def parse_sgd(data, name="sgd", lit_data=None, external_bones=None,
+              strip_bone_scale=False):
     if len(data) < 24:
         return None
 
@@ -191,6 +253,8 @@ def parse_sgd(data, name="sgd", lit_data=None, external_bones=None):
             co = coordp + b * 224
             if co + 224 <= len(data):
                 mat = list(struct.unpack('<16f', data[co:co+64]))
+                if strip_bone_scale:
+                    mat = strip_matrix_scale(mat)
                 rot = list(struct.unpack('<4f', data[co+192:co+208]))
                 parent = struct.unpack('<i', data[co+208:co+212])[0]
                 bone = SGDBone(b, parent)
@@ -570,9 +634,17 @@ def parse_sgd(data, name="sgd", lit_data=None, external_bones=None):
                                 r, g, b = struct.unpack('<fff', data[co:co+12])
                                 if r > 0.001 or g > 0.001 or b > 0.001:
                                     any_col_nonzero = True
-                                cr = min(1.0, max(0.0, r / 128.0 if r > 1.0 else r))
-                                cg = min(1.0, max(0.0, g / 128.0 if g > 1.0 else g))
-                                cb = min(1.0, max(0.0, b / 128.0 if b > 1.0 else b))
+                                # Decide 0..1 vs 0..255 once per vertex, from its
+                                # brightest channel, and apply that one scale to
+                                # all three.  Deciding per channel turned neutral
+                                # MELE palette entries whose channels sit either
+                                # side of 1.0 (r=0.72, g=b=1.99) into saturated
+                                # red: r was kept at 0.72 while g and b were
+                                # divided by 128 down to 0.016.
+                                scale = 128.0 if max(r, g, b) > 1.0 else 1.0
+                                cr = min(1.0, max(0.0, r / scale))
+                                cg = min(1.0, max(0.0, g / scale))
+                                cb = min(1.0, max(0.0, b / scale))
                                 sub_cols.append([cr, cg, cb, 1.0])
                             else:
                                 sub_cols.append([0.8, 0.8, 0.8, 1.0])

@@ -3,10 +3,13 @@ import sys
 import json
 import math
 import base64
+import binascii
 import zipfile
 import struct
 import re
 import time
+import uuid
+import threading
 import logging
 import traceback
 from io import BytesIO
@@ -18,16 +21,38 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from PIL import Image
 from pz_core.pz_pk2 import iter_embedded_tim2, unpack_pk2, unpack_room_pk2
+from pz_core.pz_pk2_ff2 import (
+    iter_embedded_tim2 as iter_embedded_tim2_ff2,
+    reconstruct_sgd_textures as reconstruct_sgd_textures_ff2,
+    unpack_pk2 as unpack_pk2_ff2,
+)
 from pz_core.pz_pk4 import (
     flip_uvs_vertical,
     iter_pk4_entries,
     parse_pk4_model,
 )
-from pz_core.pz_sgd_ff1 import merge_sgd_models, parse_sgd as parse_sgd_ff1
+from pz_core.pz_sgd_ff1 import (
+    is_ff1_sgd,
+    merge_sgd_models,
+    parse_sgd as parse_sgd_ff1,
+)
 from pz_core.pz_sgd_ff3 import merge_sgd_models as merge_sgd_ff3, parse_sgd as parse_sgd_ff3
-from pz_core.pz_bmd import parse_bmd_motion
+from pz_core.pz_sgd_ff2 import merge_sgd_models as merge_sgd_ff2, parse_sgd as parse_sgd_ff2
+from pz_core.pz_mdl_ff1 import FF1MDLError, parse_ff1_mdl
+from pz_core.pz_mpx_ff1x import XboxMPXError, parse_xbox_asset
+from pz_core.pz_xpr0 import XPR0Error
+from pz_core.pz_export_xbox import (
+    export_obj as export_xbox_aware_obj,
+    export_glb as export_xbox_aware_glb,
+)
+from pz_core.pz_mdlb_ff2w import (
+    FF2WError,
+    parse_ff2w_model,
+    parse_ff2w_textures,
+)
 from pz_core.pz_tim2_ff3 import decode_tim2, render_tim2_clut_variation
 from pz_core.pz_tim2_ff1 import reconstruct_sgd_textures
+from pz_core.pz_tim2_ff2 import decode_tim2 as decode_tim2_ff2
 from pz_core.pz_collision import (
     parse_room_collision_from_map,
     parse_all_rooms_collision_from_map,
@@ -46,6 +71,102 @@ PREFERENCES_FILE = os.path.join(APP_DIR, "PZViewer_paths.json")
 os.makedirs(EXPORTS_DIR, exist_ok=True)
 
 
+# Games the Asset Browser can browse. "ff2w" is the Wii release of Fatal
+# Frame 2, whose models live in .mdlb / .pk2b containers instead of the PS2
+# SGD archives, so it needs its own parser but shares the same folder plumbing.
+GAME_IDS = ("ff1", "ff1x", "ff2", "ff2w", "ff3")
+GAME_LABELS = {
+    "ff1": "Fatal Frame 1 Files",
+    "ff1x": "Fatal Frame 1 XBOX Files",
+    "ff2": "Fatal Frame 2 Files",
+    "ff2w": "Fatal Frame 2 Wii Files",
+    "ff3": "Fatal Frame 3 Files",
+}
+
+XPR0_MAGIC = b"XPR0"
+
+# Recolour archives: an XPR file can hold the geometry of an MPX in a different
+# colourway, and an MPX with no same-stem XPR at all can borrow one. The order
+# here is the cycle order and it is never reordered at request time -- the active
+# archive is reported separately, so clicking through the variants cannot shuffle
+# the list under the user's cursor.
+#
+# m000_spe5.xpr and m000_spe6.xpr were proven to be colourways of m000_miku4
+# while their sibling MPXs still existed (those three files were byte-for-byte
+# identical, SHA-256 8443b2188f90...); the MPX copies have since been deleted.
+# m000_miku2 has no same-stem archive, so its colourways are the spe set.
+XPR_RECOLOUR_VARIANTS = {
+    "m000_miku4": ("m000_miku4.xpr", "m000_spe5.xpr", "m000_spe6.xpr"),
+    "m000_miku2": ("m000_spe1.xpr", "m000_spe2.xpr", "m000_spe3.xpr"),
+}
+
+
+def _xpr_variants_for(mpx_path):
+    """XPR files that recolour this MPX's geometry, in the order to cycle them.
+
+    Only the archives that actually exist in the same folder are returned, so a
+    partially copied data set degrades to the ones that are there rather than to
+    a load failure.
+    """
+    stem = os.path.splitext(os.path.basename(mpx_path))[0].casefold()
+    folder = os.path.dirname(os.path.abspath(mpx_path))
+    found = []
+    for name in XPR_RECOLOUR_VARIANTS.get(stem, ()):
+        if os.path.isfile(os.path.join(folder, name)):
+            found.append(name)
+    return found
+
+
+def _has_xbox_texture_archive(file_path):
+    """True when a .mdl embeds an XPR0 texture archive, i.e. it is an Xbox asset.
+
+    The PS2 and Xbox FF1 builds share the PK2_HEAD container and the .mdl
+    extension, so the name cannot tell them apart. Xbox assets embed an XPR0
+    archive and carry 0x1060 SGD records; neither appears anywhere in the PS2
+    set. This replaced the deleted legacy reader's content sniffer for the sole
+    purpose of refusing the file instead of mis-parsing it.
+    """
+    try:
+        with open(file_path, "rb") as handle:
+            return handle.read(4096).find(XPR0_MAGIC) != -1
+    except OSError:
+        return False
+# Extensions the browser lists per game. Only loadable model containers are
+# listed: for FF2 Wii the .ppdb/.anmb/.pakb/.zldb siblings are texture and
+# animation payloads, and offering them as browsable models only produced
+# unopenable entries in the file tree. "all" keeps the full union.
+GAME_EXTENSIONS = {
+    # .xpr is deliberately absent everywhere: it is the texture sidecar that
+    # sits next to a sibling .mpx and is bound to it automatically, so listing it
+    # only offers a row that opens an archive with no geometry of its own. The
+    # load path still accepts one if the path is typed directly.
+    'ff1': ('.mdl', '.pk2', '.sgd', '.tim2', '.mpx'),
+    # The Xbox FF1 build. Its characters arrive as .mpx, which is the container
+    # that carries geometry and its XPR0 textures together; its .mdl files are the
+    # same PK2_HEAD container as the PS2 ones but with geometry records the PS2
+    # parser does not read, and they are hidden inside the XBOX folder rather
+    # than listed here. .mpk and .acs are the pack and accessory containers that
+    # ship alongside, kept out of the tree for the same reason .xpr is.
+    'ff1x': ('.mpx',),
+    'ff2': ('.pk2', '.sgd', '.tim2', '.tm2'),
+    'ff3': ('.pk4', '.sgd', '.tm2'),
+    'ff2w': ('.mdlb', '.pk2b'),
+    'all': ('.mdl', '.pk2', '.pk4', '.sgd', '.cld', '.obj', '.tm2', '.tim2', '.png',
+            '.mdlb', '.pk2b', '.mpx'),
+}
+
+# FF2 Wii ships each model in its own unit scale, so there is no single global
+# factor. Measured against the FF3 assets the viewer already displays:
+#   character 0.678 tall -> x45.5 lands on FF3's 30.9
+#   room      30.7 wide  -> x3.26 lands on FF3's 100
+#   door       0.9 wide  -> x20.0 lands on FF3's 18.0
+# Items share the door convention (a key is 0.05 units, a pair of glasses 0.15),
+# so both use x20. Keyed on container *and* bone count: a pk2b with one bone is
+# room geometry, anything above that is a prop.
+FF2W_SCALE_CHARACTER = 45.5
+FF2W_SCALE_ROOM = 3.26
+FF2W_SCALE_PROP = 20.0
+
 def load_folder_preferences():
     try:
         with open(PREFERENCES_FILE, "r", encoding="utf-8") as preferences:
@@ -53,14 +174,14 @@ def load_folder_preferences():
         return {
             key: str(value).replace("\\", "/")
             for key, value in data.items()
-            if key in ("ff1", "ff2", "ff3") and isinstance(value, str) and value.strip()
+            if key in GAME_IDS and isinstance(value, str) and value.strip()
         }
     except (OSError, ValueError, TypeError):
         return {}
 
 
 def save_folder_preference(game, path):
-    if game not in ("ff1", "ff2", "ff3"):
+    if game not in GAME_IDS:
         return load_folder_preferences()
     paths = load_folder_preferences()
     if path and path.strip():
@@ -88,12 +209,12 @@ def folder_is_within_root(path, root):
 CURRENT_STATE = {
     "model": None,
     "textures": [],
-    "animations": [],
     "collision": [],
     "source_file": "",
     "model_type": "none"
 }
 LOAD_CACHE = {}
+BATCH_JOBS = {}  # job_id -> {status, total, done, failed, skipped, current, errors, log, output_dir}
 
 _LOAD_LOGGER = logging.getLogger("pzviewer.load")
 if not _LOAD_LOGGER.handlers:
@@ -124,72 +245,82 @@ class LoadProgress:
             f"traceback={traceback.format_exc().splitlines()[-1] if traceback.format_exc() else 'n/a'}"
         )
 
-def find_matching_bmd_animations(model_path):
-    """Load FF3 motion clips whose character prefix matches a PK4 model."""
-    model_text = os.path.abspath(model_path).lower()
-    match = re.search(r"([a-z]+\d+)_pk4", model_text)
-    if not match:
-        model_stem = os.path.splitext(os.path.basename(model_path))[0].lower()
-        match = re.match(r"([a-z]+\d+)", model_stem)
-    if not match:
-        return []
-    prefix = match.group(1)
-    model_abs = os.path.abspath(model_path)
-    parts = model_abs.split(os.sep)
-    try:
-        data_index = next(i for i, part in enumerate(parts) if part.lower() == "3ddata")
-    except StopIteration:
-        return []
-    data_root = os.sep.join(parts[:data_index + 1])
-    motion_root = os.path.join(data_root, "character", "motion")
-    if not os.path.isdir(motion_root):
-        return []
+# Numbered SGD components that must never be merged into a loaded model.
+# Keys are FF3 character pack prefixes under character\model, values are the
+# component numbers to drop. These packs keep a "shado" helper body (the
+# ch000 shadow, shared by the first character costumes) that duplicates the real
+# bone names, so it z-fights and hides the character in the viewer. ch006 is the
+# odd one out: it stops at 0011 and stores the shadow there instead.
+SKIPPED_SGD_COMPONENTS = {
+    "ch000": frozenset({15}),
+    "ch001": frozenset({15}),
+    "ch002": frozenset({15}),
+    "ch003": frozenset({15}),
+    "ch004": frozenset({15}),
+    "ch005": frozenset({15}),
+    "ch006": frozenset({11}),
+    "ch007": frozenset({15}),
+}
 
-    clips = []
-    motion_dirs = sorted(
-        os.path.join(motion_root, entry)
-        for entry in os.listdir(motion_root)
-        if entry.lower().startswith(prefix)
-        and os.path.isdir(os.path.join(motion_root, entry))
+
+def character_pack_prefix(path):
+    """Return the FF3 character pack prefix (e.g. ch000) for a model path.
+
+    Character packs live in character\\model\\<prefix>_pk4, so the pack folder
+    is the entry that follows "model" in the path.
+    """
+    parts = os.path.normcase(os.path.abspath(path)).split(os.sep)
+    for index, part in enumerate(parts[:-1]):
+        if part == "model":
+            match = re.match(r"([a-z]+\d+)", os.path.splitext(parts[index + 1])[0])
+            if match:
+                return match.group(1)
+    return None
+
+
+def skipped_sgd_components(path):
+    """Return the numbered SGD components excluded for a model path."""
+    return SKIPPED_SGD_COMPONENTS.get(character_pack_prefix(path), frozenset())
+
+
+def numbered_sgd_files(sgd_dir, excluded_indexes=(), exclude_path=None):
+    """List numbered *.sgd names in sgd_dir, skipping excluded components."""
+    excluded = set(excluded_indexes)
+    if exclude_path:
+        exclude_path = os.path.normcase(os.path.abspath(exclude_path))
+    return sorted(
+        name for name in os.listdir(sgd_dir)
+        if name.lower().endswith('.sgd')
+        and os.path.splitext(name)[0].isdigit()
+        and int(os.path.splitext(name)[0]) not in excluded
+        and (not exclude_path
+             or os.path.normcase(os.path.join(sgd_dir, name)) != exclude_path)
     )
-    default_dirs = [
-        path for path in motion_dirs
-        if "_default_" in os.path.basename(path).lower()
-    ]
-    if default_dirs:
-        motion_dirs = default_dirs
-    for motion_dir in motion_dirs:
-        for bmd_path in sorted(
-            os.path.join(root, filename)
-            for root, _, files in os.walk(motion_dir)
-            for filename in files
-            if filename.lower().endswith(".bmd")
-        ):
-            clip = parse_bmd_motion(
-                bmd_path,
-                name=f"{os.path.basename(motion_dir)}/{os.path.splitext(os.path.basename(bmd_path))[0]}"
-            )
-            if clip:
-                clips.append(clip)
-    return clips
 
-def serialize_model(model, textures=None, animations=None, collision_meshes=None, model_type="model"):
+
+def serialize_textures(textures):
+    """Encode PIL surfaces as the data-URI list the frontend expects."""
     tex_list = []
-    if textures:
-        for img in textures:
-            buf = BytesIO()
-            img.save(buf, format='PNG')
-            w, h = img.size
-            tex_list.append({
-                "data_uri": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode('ascii'),
-                "width": w,
-                "height": h,
-                "has_alpha": (
-                    "A" in img.getbands()
-                    and img.getchannel("A").getextrema()[0] < 255
-                )
-            })
+    for img in textures or []:
+        buf = BytesIO()
+        img.save(buf, format='PNG')
+        w, h = img.size
+        alpha_min = alpha_max = 255
+        if "A" in img.getbands():
+            alpha_min, alpha_max = img.getchannel("A").getextrema()
+        tex_list.append({
+            "data_uri": "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode('ascii'),
+            "width": w,
+            "height": h,
+            "has_alpha": alpha_min < 255,
+            "alpha_min": alpha_min,
+            "alpha_max": alpha_max,
+        })
+    return tex_list
 
+
+def serialize_model(model, textures=None, collision_meshes=None, model_type="model"):
+    tex_list = serialize_textures(textures)
     materials_data = []
     for mat in getattr(model, 'materials', []):
         materials_data.append({
@@ -319,19 +450,6 @@ def serialize_model(model, textures=None, animations=None, collision_meshes=None
         "boxes": col_boxes
     }
 
-    anims_data = []
-    if animations:
-        for c in animations:
-            anims_data.append({
-                "name": c.name,
-                "bone_num": c.bone_num,
-                "num_frames": c.frame_num,
-                "frame_num": c.frame_num,
-                "fps": c.fps,
-                "parent_ids": c.parent_ids,
-                "frames": c.frames
-            })
-
     diagnostics = {
         "materials_mapped": texture_mapped,
         "materials_total": len(getattr(model, 'materials', [])),
@@ -341,8 +459,59 @@ def serialize_model(model, textures=None, animations=None, collision_meshes=None
         "position_max": max(position_values) if position_values else 0.0,
         "position_values": len(position_values)
     }
+    diagnostics["texture_alpha"] = []
+    for texture_index, image in enumerate(textures or []):
+        alpha_min = alpha_max = 255
+        if "A" in image.getbands():
+            alpha_min, alpha_max = image.getchannel("A").getextrema()
+        linked = []
+        for mat in getattr(model, "materials", []):
+            if getattr(mat, "texture_index", -1) == texture_index:
+                tex0 = getattr(mat, "tex0", 0) or getattr(mat, "tex0_low", 0)
+                linked.append({
+                    "material": getattr(mat, "name", ""),
+                    "tbp0": tex0 & 0x3FFF if tex0 else None,
+                    "psm": (tex0 >> 20) & 0x3F if tex0 else None,
+                    "cbp": (tex0 >> 37) & 0x3FFF if tex0 else None,
+                    "csm": (tex0 >> 55) & 1 if tex0 else None,
+                    "csa": (tex0 >> 56) & 0x1F if tex0 else None,
+                })
+        diagnostics["texture_alpha"].append({
+            "texture_index": texture_index,
+            "width": image.width,
+            "height": image.height,
+            "alpha_min": alpha_min,
+            "alpha_max": alpha_max,
+            "has_alpha": alpha_min < 255,
+            "materials": linked,
+        })
+    if bones_data:
+        bone_ids = {bone["id"] for bone in bones_data}
+        diagnostics["skeleton"] = {
+            "bone_count": len(bones_data),
+            "roots": [bone["id"] for bone in bones_data if bone["parent"] < 0],
+            "invalid_parents": [
+                {"id": bone["id"], "parent": bone["parent"]}
+                for bone in bones_data
+                if bone["parent"] >= 0 and bone["parent"] not in bone_ids
+            ],
+            "self_parents": [
+                bone["id"] for bone in bones_data if bone["parent"] == bone["id"]
+            ],
+            "non_degenerate_matrices": sum(
+                1 for bone in bones_data
+                if len(bone["matrix"]) >= 16 and
+                all(math.isfinite(value) for value in bone["matrix"])
+            ),
+            "weighted_meshes": sum(
+                1 for mesh in meshes_data
+                if 0 <= mesh["bone_index"] < len(bones_data)
+            ),
+        }
     if hasattr(model, "texture_debug"):
         diagnostics["texture_debug"] = model.texture_debug
+    if hasattr(model, "parse_diagnostics"):
+        diagnostics["parser"] = model.parse_diagnostics
     diagnostics["foliage_meshes"] = foliage_diagnostics
     diagnostics["foliage_uv_corrections"] = getattr(
         model, "foliage_uv_corrections", []
@@ -359,14 +528,17 @@ def serialize_model(model, textures=None, animations=None, collision_meshes=None
         "collision": collision_struct,
         "textures": tex_list,
         "uvs_flipped": bool(getattr(model, "uvs_are_flipped", False)),
-        "animations": anims_data,
+        # FF2 Wii atlases are small (16..512 px) and are drawn magnified across
+        # whole surfaces, so they need linear filtering or nearest sampling
+        # breaks them into hard texel blocks. The TIM2 based games keep nearest
+        # magnification because their pixel art is meant to stay crisp.
+        "texture_mag_linear": bool(getattr(model, "texture_mag_linear", False)),
         "stats": {
             "vertices": total_verts,
             "triangles": total_tris,
             "submeshes": len(meshes_data),
             "bones": len(bones_data),
-            "textures": len(tex_list),
-            "animations": len(anims_data)
+            "textures": len(tex_list)
         },
         "diagnostics": diagnostics
     }
@@ -389,7 +561,13 @@ def apply_named_foliage_uv_corrections(model):
     model.foliage_uv_corrections = corrected
     return model
 
-def find_textures_for_model(file_path, model, progress=None):
+def find_textures_for_model(
+    file_path,
+    model,
+    progress=None,
+    decode_texture=decode_tim2,
+    iter_embedded=iter_embedded_tim2,
+):
     if progress:
         progress.log("material_texture_mapping", "status=start")
     base_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -434,6 +612,7 @@ def find_textures_for_model(file_path, model, progress=None):
     tbp0_resource_index = {}
     clut_only_entries = []
     archive_paths = []
+    ff1_texture_debug = None
     if os.path.splitext(file_path)[1].lower() == '.pk4':
         archive_dir = os.path.dirname(os.path.abspath(file_path))
         archive_paths.append(file_path)
@@ -471,7 +650,7 @@ def find_textures_for_model(file_path, model, progress=None):
                     elif ext in ('.tm2', '.tim2'):
                         try:
                             with open(fpath, 'rb') as tf:
-                                timgs = decode_tim2(tf.read())
+                                timgs = decode_texture(tf.read())
                                 if timgs:
                                     for timg in timgs:
                                         tex0 = timg.get('gs_tex0', 0)
@@ -503,7 +682,7 @@ def find_textures_for_model(file_path, model, progress=None):
             if archive_path.lower().endswith(".pk2"):
                 timgs_with_entries = (
                     (timg, timg.get("_pk2_entry_index", -1))
-                    for timg in iter_embedded_tim2(archive_path)
+                    for timg in iter_embedded(archive_path)
                 )
                 for timg, entry_index in timgs_with_entries:
                     if timg.get("is_clut_only"):
@@ -543,6 +722,31 @@ def find_textures_for_model(file_path, model, progress=None):
         except (OSError, ValueError, struct.error):
             raise
 
+    # FF1 item SGDs carry their own headerless GS uploads. Match only the
+    # material's complete TEX0 metadata to the reconstructed TBP0 image.
+    if (
+        getattr(model, "sgd_format", "") in ("ff1", "ff2")
+        and os.path.splitext(file_path)[1].lower() == ".sgd"
+    ):
+        with open(file_path, "rb") as sgd_file:
+            sgd_data = sgd_file.read()
+        ff1_texture_debug = {}
+        embedded_images, embedded_uploads = reconstruct_sgd_textures(
+            sgd_data,
+            getattr(model, "materials", []),
+            diagnostics=ff1_texture_debug,
+        )
+        for tbp0, image in embedded_images.items():
+            found_images_by_tbp0[tbp0] = image
+            base_timgs_by_tbp0[tbp0] = {"image": image}
+            texture_variants_by_tbp0.setdefault(tbp0, []).append(image)
+        ff1_texture_debug["source"] = (
+            "embedded_sgd_gs_ff2"
+            if getattr(model, "sgd_format", "") == "ff2"
+            else "embedded_sgd_gs"
+        )
+        ff1_texture_debug["upload_count"] = len(embedded_uploads)
+
     # Render palette variations from CLUT-only files
     for stem, tbp0, clut_timg in clut_only_entries:
         base_timg = base_timgs_by_tbp0.get(tbp0)
@@ -559,6 +763,20 @@ def find_textures_for_model(file_path, model, progress=None):
             f"name_candidates={len(found_images_by_name)}"
         )
     if not found_images_by_tbp0 and not found_images_by_name:
+        if ff1_texture_debug is not None:
+            model.texture_debug = {
+                "ff1_embedded_gs": ff1_texture_debug,
+                "unmapped_materials": [
+                    {
+                        "index": mat.index,
+                        "name": mat.name,
+                        "tbp0": getattr(mat, "tbp0", 0),
+                        "tex0_low": getattr(mat, "tex0_low", 0),
+                    }
+                    for mat in getattr(model, "materials", [])
+                    if getattr(mat, "tex0_low", 0)
+                ],
+            }
         if progress:
             progress.log("material_texture_mapping", "mapped=0 textures=0")
         return []
@@ -673,9 +891,13 @@ def find_textures_for_model(file_path, model, progress=None):
         ],
         "mesh_overrides": mesh_overrides,
     }
+    if ff1_texture_debug is not None:
+        model.texture_debug["ff1_embedded_gs"] = ff1_texture_debug
     return textures
 
-def handle_load_file(file_path):
+def handle_load_file(file_path, game="", xpr_override=None):
+    xpr_variants = []
+    xpr_active = None
     progress = LoadProgress(file_path)
     progress.log("request_path_validation", f"path={os.path.abspath(file_path)}")
     if not os.path.exists(file_path):
@@ -687,7 +909,14 @@ def handle_load_file(file_path):
         cache_stamp = (os.path.getmtime(file_path), os.path.getsize(file_path))
     except OSError:
         cache_stamp = None
-    cached = LOAD_CACHE.get(cache_key)
+    cache_key = (cache_key, game)
+    # An explicit sidecar is part of the identity of the result, not a view of
+    # the same one: the same MPX with a different XPR is a different colourway.
+    if xpr_override:
+        cache_key = (cache_key, os.path.normcase(os.path.abspath(xpr_override)))
+    # Xbox depends on a sidecar; do not reuse JSON-only cache/state from another asset.
+    xbox_sidecar_asset = os.path.splitext(file_path)[1].lower() in ('.mpx', '.xpr')
+    cached = None if xbox_sidecar_asset else LOAD_CACHE.get(cache_key)
     if cached and cached[0] == cache_stamp:
         cached_response = dict(cached[1])
         cached_response["diagnostics"] = dict(cached[1].get("diagnostics", {}))
@@ -727,7 +956,6 @@ def handle_load_file(file_path):
 
     model = None
     textures = []
-    animations = []
     collision = []
     model_type = "model"
     sgd_parse_metrics = {
@@ -741,8 +969,17 @@ def handle_load_file(file_path):
         "unpack_vertices": 0,
     }
 
+    use_ff2_parser = game.lower() == "ff2"
+    unpack_pk2_parser = unpack_pk2_ff2 if use_ff2_parser else unpack_pk2
+    decode_texture = decode_tim2_ff2 if use_ff2_parser else decode_tim2
+    iter_embedded = iter_embedded_tim2_ff2 if use_ff2_parser else iter_embedded_tim2
+    reconstruct_textures = (
+        reconstruct_sgd_textures_ff2 if use_ff2_parser
+        else reconstruct_sgd_textures
+    )
+
     if ext == '.pk2':
-        entries = unpack_pk2(file_path)
+        entries = unpack_pk2_parser(file_path)
         progress.log("pk2_extraction", f"entries={len(entries)}")
         if not entries:
             progress.log("pk2_extraction", "status=error entries=0")
@@ -751,13 +988,60 @@ def handle_load_file(file_path):
         lit_data = open(lit_path, "rb").read() if os.path.exists(lit_path) else None
         parsed_entries = 0
         skipped_entries = []
+        ff2_item_structure = None
+        ff2_item_images = []
+        if use_ff2_parser and re.search(
+            r"(?:^|[-_])i\d{3}(?:_|\.|$)", base_name.lower()
+        ):
+            payload = b"".join(entry.get("data", b"") for entry in entries)
+            ff2_item_structure = {
+                "format": "ff2_item_package",
+                "tim2_offsets": [],
+                "tim2_pictures": [],
+                "vif_block_offsets": [],
+                "entries": [
+                    {
+                        "index": entry.get("index"),
+                        "type": entry.get("type", ""),
+                        "size": len(entry.get("data", b"")),
+                    }
+                    for entry in entries
+                ],
+            }
+            cursor = 0
+            while True:
+                offset = payload.find(b"TIM2", cursor)
+                if offset < 0:
+                    break
+                ff2_item_structure["tim2_offsets"].append(offset)
+                try:
+                    for picture in decode_texture(payload[offset:]):
+                        image = picture.get("image")
+                        if image is not None:
+                            ff2_item_images.append(image)
+                        ff2_item_structure["tim2_pictures"].append({
+                            "offset": offset,
+                            "width": image.width if image else 0,
+                            "height": image.height if image else 0,
+                            "tbp0": picture.get("gs_tex0", 0) & 0x3FFF,
+                        })
+                except (ValueError, IndexError, struct.error):
+                    pass
+                cursor = offset + 4
+            cursor = 0
+            while True:
+                offset = payload.find(b"\x50\x10", cursor)
+                if offset < 0:
+                    break
+                ff2_item_structure["vif_block_offsets"].append(offset)
+                cursor = offset + 2
         # Keep TEX0 descriptions per PK2 entry.  Reconstructing after merging
         # all entries makes auxiliary materials query unrelated VRAM, while
         # reconstructing only the first entry loses late panel textures.
         entry_materials = {}
         for index, entry in enumerate(entries):
             try:
-                part = parse_sgd_ff1(
+                part = (parse_sgd_ff2 if use_ff2_parser else parse_sgd_ff1)(
                     entry["data"],
                     name=f"{base_name}_{index:04d}",
                     lit_data=lit_data,
@@ -803,7 +1087,7 @@ def handle_load_file(file_path):
             textures = []
             for material in model.materials:
                 material.texture_index = -1
-            # FF1 rooms carry raw GS uploads in TRI2 blocks, not TIM2 files.
+            # FF1/FF2 rooms carry raw GS uploads in TRI2 blocks, not TIM2 files.
             # Reconstruct each SGD independently and match only exact TBP0.
             gs_texture_debug = []
             # The first GS upload stream initializes the room VRAM.  Include
@@ -822,7 +1106,7 @@ def handle_load_file(file_path):
                     reconstruction_materials = entry_materials.get(entry["index"], [])
                     if entry["index"] == min(entry_materials):
                         reconstruction_materials = gs_reconstruction_materials
-                    images, _uploads = reconstruct_sgd_textures(
+                    images, _uploads = reconstruct_textures(
                         entry["data"],
                         reconstruction_materials,
                         diagnostics=entry_debug
@@ -854,9 +1138,286 @@ def handle_load_file(file_path):
                     progress.error("gs_vram_texture_reconstruction", exc)
                     continue
             model.texture_debug = getattr(model, "texture_debug", {})
-            model.texture_debug["ff1_headerless_gs"] = gs_texture_debug
+            model.texture_debug[
+                "ff2_headerless_gs" if use_ff2_parser else "ff1_headerless_gs"
+            ] = gs_texture_debug
             model_type = "room"
             progress.log("gs_vram_texture_reconstruction", f"textures={len(textures)}")
+            if ff2_item_structure is not None:
+                model.texture_debug = getattr(model, "texture_debug", {})
+                model.texture_debug["ff2_item_structure"] = ff2_item_structure
+        elif ff2_item_structure is not None:
+            serialized_textures = []
+            for image in ff2_item_images:
+                buf = BytesIO()
+                image.save(buf, format="PNG")
+                serialized_textures.append({
+                    "data_uri": "data:image/png;base64,"
+                    + base64.b64encode(buf.getvalue()).decode("ascii"),
+                    "width": image.width,
+                    "height": image.height,
+                    "has_alpha": (
+                        "A" in image.getbands()
+                        and image.getchannel("A").getextrema()[0] < 255
+                    ),
+                    "alpha_min": (
+                        image.getchannel("A").getextrema()[0]
+                        if "A" in image.getbands() else 255
+                    ),
+                    "alpha_max": (
+                        image.getchannel("A").getextrema()[1]
+                        if "A" in image.getbands() else 255
+                    ),
+                })
+            ff2_item_structure["decoded_images"] = len(serialized_textures)
+            return {
+                "filename": os.path.basename(file_path),
+                "model_type": "item",
+                "type": "item",
+                "meshes": [],
+                "materials": [],
+                "textures": serialized_textures,
+                "uvs_flipped": False,
+                "diagnostics": {
+                    "ff2_item_structure": ff2_item_structure,
+                    "materials_mapped": 0,
+                    "materials_unmapped": 0,
+                },
+            }
+
+    elif ext == '.mpk':
+        # A model *pack*, not a standalone asset: it is the geometry half that
+        # the .mdl/.mpx containers pull in automatically, so it has no textures
+        # of its own and would load as an untextured model. It is also hidden
+        # from the browser. Point the user at the real container instead.
+        progress.error("mpk_not_standalone", f"file={base_name}")
+        return {
+            "error": (
+                f"{base_name}.mpk is a model pack, not a standalone model. "
+                f"Open the matching .mdl (or .mpx) instead -- it bundles this "
+                f"geometry together with the textures."
+            )
+        }
+
+    elif ext == '.acs':
+        # Accessory/attach set. Its geometry is a separate 0x1060-only piece
+        # that this reader does not decode, so it is hidden from the browser
+        # and refused here rather than shown with the character's meshes.
+        progress.error("acs_not_standalone", f"file={base_name}")
+        return {
+            "error": (
+                f"{base_name}.acs is an accessory set, not a standalone model. "
+                f"Open the matching .mdl or .mpx instead."
+            )
+        }
+
+    elif ext in ('.mdl', '.mpx', '.xpr'):
+        # The PS2 and Xbox builds share both the PK2_HEAD container and the .mdl
+        # extension, so sniff the payload before choosing a parser.  Both .mdl
+        # flavours sit in this tree: the PS2 characters as man\mdl\mNNN_name.mdl
+        # and the Xbox ones inside a man\mdl\mNNN_name\ subfolder, so the
+        # extension alone cannot tell them apart.  Only the MPX/XPR containers
+        # are Xbox now; the legacy .mdl Xbox reader is gone, so an Xbox .mdl
+        # falls through to the PS2 parser below and is rejected there.
+        if ext in ('.mpx', '.xpr'):
+            xpr_variants = _xpr_variants_for(file_path)
+            # What the parser binds on its own: the archive with this model's own
+            # name, if there is one. It is also the default the cycle starts at.
+            same_stem = os.path.splitext(base_name)[0].casefold()
+            default_xpr = next((n for n in xpr_variants
+                                if os.path.splitext(n)[0].casefold() == same_stem),
+                               None)
+            # An explicit sidecar overrides the same-stem one, which is how the
+            # recolour variants are reached: several XPR files hold the same
+            # geometry in different colourways. The viewer sends a bare file
+            # name, so it is resolved next to the model rather than against the
+            # server's working directory.
+            xpr_override = xpr_override.strip() if xpr_override else None
+            folder = os.path.dirname(os.path.abspath(file_path))
+            if xpr_override and not os.path.isabs(xpr_override):
+                candidate = os.path.join(folder, xpr_override)
+                if os.path.isfile(candidate):
+                    xpr_override = candidate
+                else:
+                    progress.error("ff1x_parse", f"xpr sidecar not found: {xpr_override}")
+                    return {"error": f"XPR sidecar not found: {xpr_override}"}
+            if xpr_override:
+                xpr_active = os.path.basename(xpr_override)
+                if xpr_active not in xpr_variants:
+                    # An archive outside the declared set still loads, but it is
+                    # not offered in the cycle and does not switch the button on.
+                    xpr_variants = []
+            elif default_xpr:
+                xpr_active = default_xpr
+            elif xpr_variants:
+                # Declared colourways but no same-stem archive, so the parser
+                # would bind nothing and every material would come up unbound --
+                # a model with no visible textures at all. The first declared
+                # colourway is bound instead, which is what the cycle would
+                # select on the first click anyway. m000_miku2 is the case that
+                # needs this: it ships no m000_miku2.xpr of its own.
+                default_xpr = xpr_variants[0]
+                xpr_active = default_xpr
+                if os.path.isfile(os.path.join(folder, default_xpr)):
+                    xpr_override = os.path.join(folder, default_xpr)
+            try:
+                xbox_result = parse_xbox_asset(file_path, name=base_name,
+                                               xpr=xpr_override)
+            except (XboxMPXError, XPR0Error) as exc:
+                progress.error("ff1x_parse", exc)
+                return {"error": f"Unsupported or malformed FF1 Xbox asset: {exc}"}
+            xd = xbox_result.diagnostics
+            # A bare .xpr is a texture archive with no geometry of its own. The
+            # viewer needs a model to render, so report the surfaces (encoded
+            # properly) without pretending there is a scene.
+            if xbox_result.model is None:
+                if not xbox_result.textures:
+                    progress.error("ff1x_parse", "no geometry and no textures")
+                    return {
+                        "error": (
+                            f"{base_name}: XPR0 texture archive has no usable "
+                            f"texture surfaces"
+                        )
+                    }
+                progress.log(
+                    "ff1x_parse",
+                    f"status=textures_only surfaces={len(xbox_result.textures)}",
+                )
+                if ext == '.xpr':
+                    # A standalone archive must not leave the previous model selected for export.
+                    from pz_core.pz_sgd_ff3 import SGDModel
+                    CURRENT_STATE.update({"model": SGDModel(base_name),
+                        "textures": [p["image"] for p in xbox_result.textures],
+                        "collision": [], "source_file": file_path, "model_type": "textures"})
+                return {
+                    "filename": os.path.basename(file_path),
+                    "model_type": "textures",
+                    "type": "textures",
+                    "meshes": [],
+                    "bones": [],
+                    "materials": [],
+                    "textures": serialize_textures(
+                        [p["image"] for p in xbox_result.textures]
+                    ),
+                    "uvs_flipped": True,
+                    "diagnostics": xd,
+                }
+            model = xbox_result.model
+            textures = [p["image"] for p in xbox_result.textures]
+            model_type = "character"
+            model.parse_diagnostics = xd
+            progress.log(
+                "ff1x_parse",
+                f"status=complete sgd1050={xd['sgd1050_entries']} "
+                f"sgd1060={xd['sgd1060_entries']} xpr0_surfaces={xd['xpr0_textures']} "
+                f"meshes={len(model.meshes)} textures={len(textures)} "
+                f"bound={xd['bound_by']}"
+            )
+        else:
+            # An Xbox .mdl lands here too: both builds share the PK2_HEAD
+            # container and the .mdl extension. They are handed to the PS2
+            # parser, which reads the 0x1050 geometry records of the ones whose
+            # layout it understands -- for those the geometry comes out
+            # identical to the PS2 original, only without textures, because the
+            # surfaces live in the embedded XPR0 archive. The rest it refuses,
+            # and this turns that refusal into a message that points at the
+            # container which does carry the geometry and the textures.
+            try:
+                mdl_result = parse_ff1_mdl(file_path, name=base_name)
+            except FF1MDLError as exc:
+                progress.error("mdl_parse", exc)
+                message = f"Unsupported or malformed FF1 MDL: {exc}"
+                if _has_xbox_texture_archive(file_path):
+                    message += (
+                        " (This is an Xbox build container: its surfaces are in an "
+                        "embedded XPR0 archive and its geometry uses records the PS2 "
+                        "reader does not know. Open the .mpx next to it instead.)"
+                    )
+                return {"error": message}
+            model = mdl_result.model
+            textures = mdl_result.textures
+            model_type = "character"
+            model.parse_diagnostics = mdl_result.diagnostics
+            progress.log(
+                "mdl_parse",
+                f"status=complete model_entries={mdl_result.diagnostics['model_entries_parsed']} "
+                f"meshes={len(model.meshes)} textures={len(textures)}"
+            )
+
+    elif ext in ('.mdlb', '.pk2b'):
+        mapped = 0
+        textures = []
+        try:
+            model = parse_ff2w_model(file_path, name=base_name)
+            # FF2 Wii keeps textures out of the model container: the images
+            # live in a sibling PPDB with the same stem (ch000_bontage.mdlb ->
+            # ch000_bontage.ppdb, rch00.pk2b -> rch00.ppdb). Rooms additionally
+            # ship a <stem>Mono.ppdb lightmap that is not bound to materials.
+            ppdb_path = os.path.splitext(file_path)[0] + '.ppdb'
+            if os.path.exists(ppdb_path):
+                texture_set = parse_ff2w_textures(ppdb_path, model)
+                textures = list(texture_set)
+                for material in model.materials:
+                    slot = texture_set.material_slots.get(material.index)
+                    if slot is not None:
+                        material.texture_index = slot
+                        mapped += 1
+            else:
+                progress.log(
+                    "mdlb_parse",
+                    f"status=warning missing_texture_container "
+                    f"expected={os.path.basename(ppdb_path)}"
+                )
+        except FF2WError as exc:
+            progress.error("mdlb_parse", exc)
+            return {"error": f"Unsupported or malformed FF2 Wii asset: {exc}"}
+        model.name = base_name
+        # .mdlb is always a skinned character. .pk2b covers rooms, doors and
+        # items: rooms are static (one dummy bone, baked vertex colours) while
+        # doors and items carry a couple of bones so they must stay props.
+        if ext == '.mdlb':
+            model_type = "character"
+        elif len(model.bones) <= 1:
+            model_type = "room"
+        else:
+            model_type = "prop"
+        # FF2 Wii .mdlb atlases are wound the opposite way to the FF3 ones, so the
+        # texture must be left unflipped for every FF2 Wii asset. The pk2b
+        # surfaces keep that same unflipped orientation -- their earlier
+        # problem was a sheared UV layout from a mis-detected vertex stride,
+        # not an inversion, so flipping them was never the fix.
+        model.uvs_are_flipped = True
+
+        if ext == '.mdlb':
+            scale = FF2W_SCALE_CHARACTER
+        elif model_type == "room":
+            scale = FF2W_SCALE_ROOM
+        else:
+            scale = FF2W_SCALE_PROP
+        # Remembered so the glTF/GLB export can undo this and write real metres
+        # (MODEL_UNIT_TO_METRES) the way the MDLB Viewer exports, instead of the
+        # viewer units this scale exists to produce.
+        model.ff2w_applied_scale = scale
+        # The skeleton has to travel with the geometry: the viewer reads a bone's
+        # world position out of matrix[12:15], not out of bone.trans, so scaling
+        # only the vertex data left the rig at the original size. The 3x3 block
+        # keeps its baked 0.05 bone scale and rotation; only the translation
+        # column is rescaled, which is the correct way to change units.
+        for mesh in model.meshes:
+            mesh.positions = [[c * scale for c in p] for p in mesh.positions]
+        for bone in model.bones:
+            bone.trans = [c * scale for c in bone.trans]
+            if len(getattr(bone, "matrix", ())) >= 16:
+                bone.matrix = list(bone.matrix)
+                bone.matrix[12] *= scale
+                bone.matrix[13] *= scale
+                bone.matrix[14] *= scale
+        progress.log(
+            "mdlb_parse",
+            f"status=complete container={ext} meshes={len(model.meshes)} "
+            f"bones={len(model.bones)} materials={len(model.materials)} "
+            f"textures={len(textures)} materials_mapped={mapped}"
+        )
 
     elif ext == '.pk4':
         normalized_path = os.path.normcase(os.path.abspath(file_path))
@@ -878,19 +1439,19 @@ def handle_load_file(file_path):
             # Keep the selected archive name for the export folder, even when
             # the first SGD inside the archive uses a numeric display name.
             model.name = base_name
-            textures = find_textures_for_model(file_path, model, progress)
+            textures = find_textures_for_model(
+                file_path,
+                model,
+                progress,
+                decode_texture=decode_texture,
+                iter_embedded=iter_embedded,
+            )
             model_type = "room" if is_room_path else (
                 "character" if "character" in file_path.lower() else "prop"
             )
             # FF3 room images need the WebGL-origin inversion, while FF3
             # character atlases already match the parsed character UVs.
             model.uvs_are_flipped = model_type != "character"
-            if model_type == "character":
-                # Load one representative clip automatically. Loading all
-                # 255 BMDs at once creates a very large JSON response and
-                # prevents the animation panel from rendering. Individual
-                # BMDs can still be loaded through "Load animation...".
-                animations = find_matching_bmd_animations(file_path)[:1]
             if is_room_path:
                 cld_candidates = [
                     os.path.join(os.path.dirname(file_path), "02_cld"),
@@ -921,11 +1482,17 @@ def handle_load_file(file_path):
                     with open(lit_path, "rb") as lf:
                         lit_data = lf.read()
                     break
-        # Standalone SGD files are FF3 resources by default.  FF1 SGDs only
-        # reach this branch when opened from the generated PK2-linked folder.
-        use_ff1_parser = "_pk2_linked" in path_lower
-        parse_sgd = parse_sgd_ff1 if use_ff1_parser else parse_sgd_ff3
-        merge_sgd = merge_sgd_models if use_ff1_parser else merge_sgd_ff3
+        # Standalone SGD files are FF3 resources by default; FF1 item names,
+        # item paths, and generated PK2-linked paths select the FF1 parser.
+        use_ff1_parser = is_ff1_sgd(base_data, file_path)
+        parse_sgd = (
+            parse_sgd_ff2 if use_ff2_parser else
+            (parse_sgd_ff1 if use_ff1_parser else parse_sgd_ff3)
+        )
+        merge_sgd = (
+            merge_sgd_ff2 if use_ff2_parser else
+            (merge_sgd_models if use_ff1_parser else merge_sgd_ff3)
+        )
         model = parse_sgd(base_data, name=base_name, lit_data=lit_data)
         sgd_parse_metrics["sgd_processed"] += 1
         for key, value in getattr(model, "parse_diagnostics", {}).items():
@@ -943,28 +1510,63 @@ def handle_load_file(file_path):
         is_room_sgd = "\\room\\" in path_lower or "/room/" in path_lower
         is_object_sgd = "\\object\\" in path_lower or "/object/" in path_lower
         is_furniture_sgd = "\\furniture\\" in path_lower or "/furniture/" in path_lower
+        is_door_sgd = "\\door\\" in path_lower or "/door/" in path_lower
         is_accessory_sgd = "\\accessory\\" in path_lower or "/accessory/" in path_lower
         is_fly_sgd = "\\fly\\" in path_lower or "/fly/" in path_lower
+        is_ff1_texture_sgd = (
+            use_ff1_parser
+            and (
+                "\\item\\" in path_lower
+                or "/item/" in path_lower
+                or "\\furniture\\" in path_lower
+                or "/furniture/" in path_lower
+                or "\\door\\" in path_lower
+                or "/door/" in path_lower
+                or re.search(r"(?:^|[-_])i\d{3}(?:_|\.|$)", os.path.basename(path_lower))
+                is not None
+            )
+        )
         model_type = "room" if is_room_sgd else "prop"
         if not is_room_sgd and "character" in path_lower:
             model_type = "character"
-            animations = find_matching_bmd_animations(file_path)[:1]
         if not use_ff1_parser:
             model.uvs_are_flipped = model_type != "character"
+        elif is_ff1_texture_sgd:
+            # Standalone FF1 furniture/door images already have the PNG origin
+            # expected by the parsed UVs. Items retain the legacy image flip.
+            furniture_or_door = is_furniture_sgd or is_door_sgd
+            model.uvs_are_flipped = furniture_or_door
+            model.texture_debug = getattr(model, "texture_debug", {})
+            model.texture_debug["ff1_item_orientation"] = {
+                "uvs_flipped": furniture_or_door,
+                "texture_flip_y": not furniture_or_door,
+                "correction": (
+                    "frontend_texture_flip_only"
+                    if not furniture_or_door
+                    else "native_uv_orientation_no_texture_flip"
+                ),
+            }
 
         # ── Auto-merge sibling numbered SGDs (e.g. 0000–0015 for one character) ──
         sgd_dir    = os.path.dirname(file_path)
         sgd_stem   = os.path.splitext(os.path.basename(file_path))[0]
 
         if sgd_stem.isdigit():
-            if not is_room_sgd and int(sgd_stem) == 15:
-                candidates = sorted(
-                    f for f in os.listdir(sgd_dir)
-                    if f.lower().endswith('.sgd')
-                    and os.path.splitext(f)[0].isdigit()
-                    and (is_room_sgd or int(os.path.splitext(f)[0]) not in ({14, 15} if not any(
-                        os.path.splitext(x)[0] == "15" for x in os.listdir(sgd_dir)
-                    ) else {15}))
+            # Some packs ship components the viewer must ignore (ch000 keeps its
+            # shadow body in 0015.sgd), and 0015 is the collision component for
+            # the rest. Never start the merge from one of those.
+            skipped_indexes = set(skipped_sgd_components(file_path))
+            collision_indexes = set()
+            if not is_room_sgd:
+                collision_indexes.add(15)
+                if not any(
+                    os.path.splitext(name)[0] == "15" for name in os.listdir(sgd_dir)
+                ):
+                    collision_indexes.add(14)
+
+            if int(sgd_stem) in skipped_indexes | collision_indexes:
+                candidates = numbered_sgd_files(
+                    sgd_dir, skipped_indexes | collision_indexes
                 )
                 if candidates:
                     file_path = os.path.join(sgd_dir, candidates[0])
@@ -973,13 +1575,8 @@ def handle_load_file(file_path):
                         model = parse_sgd(f.read(), name=sgd_stem)
 
             # Collect all sibling numbered SGDs sorted, excluding the file we just loaded
-            norm_loaded = os.path.normcase(os.path.abspath(file_path))
-            all_numbered = sorted(
-                f for f in os.listdir(sgd_dir)
-                if f.lower().endswith('.sgd')
-                and os.path.splitext(f)[0].isdigit()
-                and (is_room_sgd or int(os.path.splitext(f)[0]) != 15)
-                and os.path.normcase(os.path.join(sgd_dir, f)) != norm_loaded
+            all_numbered = numbered_sgd_files(
+                sgd_dir, skipped_indexes, exclude_path=file_path
             )
 
             if all_numbered:
@@ -1028,27 +1625,25 @@ def handle_load_file(file_path):
                     )
         # ────────────────────────────────────────────────────────────────────────
 
-        textures = find_textures_for_model(file_path, model, progress)
-
-    elif ext == '.bmd':
-        clip = parse_bmd_motion(
+        textures = find_textures_for_model(
             file_path,
-            name=os.path.splitext(os.path.basename(file_path))[0]
+            model,
+            progress,
+            decode_texture=decode_texture,
+            iter_embedded=iter_embedded,
         )
-        animations = [clip] if clip else []
-        if CURRENT_STATE["model"]:
-            CURRENT_STATE["animations"] = animations
-            return {"status": "ok", "animations": [
-                {
-                    "name": c.name,
-                    "bone_num": c.bone_num,
-                    "num_frames": c.frame_num,
-                    "fps": c.fps,
-                    "frames": c.frames
-                } for c in animations
-            ]}
-        else:
-            return {"error": "Please load a character before loading an animation!"}
+        if is_ff1_texture_sgd:
+            model.texture_debug = getattr(model, "texture_debug", {})
+            furniture_or_door = is_furniture_sgd or is_door_sgd
+            model.texture_debug["ff1_item_orientation"] = {
+                "uvs_flipped": furniture_or_door,
+                "texture_flip_y": not furniture_or_door,
+                "correction": (
+                    "frontend_texture_flip_only"
+                    if not furniture_or_door
+                    else "native_uv_orientation_no_texture_flip"
+                ),
+            }
 
     elif ext == '.obj' and os.path.basename(file_path).lower().startswith('msn'):
         with open(file_path, 'rb') as f:
@@ -1076,12 +1671,21 @@ def handle_load_file(file_path):
     # narrow correction as direct PK4 loads.
     apply_named_foliage_uv_corrections(model)
 
+    # Every model, whatever the game or the container it came out of. These
+    # atlases are low resolution and are magnified across whole surfaces, so
+    # nearest sampling breaks them into hard texel blocks that are not in the
+    # game: the MDLB Viewer, which reads the very same PS2-style containers,
+    # uploads with GL_LINEAR magnification (mdlb_viewer.py:603).
+    # Magnification only. Minification keeps nearest plus mipmaps, because that
+    # is what avoids the aliasing linear sampling would introduce when a texture
+    # is shrunk rather than enlarged.
+    model.texture_mag_linear = True
+
     # The export folder must follow the selected file, not an internal SGD
     # name such as 0000.
     model.export_name = os.path.splitext(os.path.basename(file_path))[0]
     CURRENT_STATE["model"] = model
     CURRENT_STATE["textures"] = textures
-    CURRENT_STATE["animations"] = animations
     CURRENT_STATE["collision"] = collision
     CURRENT_STATE["source_file"] = file_path
     CURRENT_STATE["model_type"] = model_type
@@ -1089,9 +1693,16 @@ def handle_load_file(file_path):
     progress.log(
         "serialization",
         f"meshes={len(getattr(model, 'meshes', []))} materials={len(getattr(model, 'materials', []))} "
-        f"textures={len(textures)} animations={len(animations)}"
+        f"textures={len(textures)}"
     )
-    response = serialize_model(model, textures, animations, collision, model_type)
+    response = serialize_model(model, textures, collision, model_type)
+    if xpr_variants:
+        response["xpr_variants"] = xpr_variants
+        response["xpr_active"] = xpr_active
+        # The viewer only offers the recolour switch where it is meaningful: one
+        # model with more than one palette. Deciding it here keeps the rule out
+        # of the frontend, which otherwise has to re-derive it from the file name.
+        response["xpr_variant_switch"] = len(xpr_variants) > 1
     if ext == '.pk2':
         response["diagnostics"].update({
             "pk2_entries": len(entries),
@@ -1103,7 +1714,8 @@ def handle_load_file(file_path):
         response["diagnostics"].update(sgd_parse_metrics)
     response["diagnostics"]["load_ms"] = round((time.perf_counter() - load_started) * 1000.0, 1)
     response["diagnostics"]["cache"] = "miss"
-    LOAD_CACHE[cache_key] = (cache_stamp, response)
+    if not xbox_sidecar_asset:
+        LOAD_CACHE[cache_key] = (cache_stamp, response)
     # Keep memory bounded while retaining the common repeat-load fast path.
     if len(LOAD_CACHE) > 4:
         LOAD_CACHE.pop(next(iter(LOAD_CACHE)))
@@ -1114,9 +1726,187 @@ def handle_load_file(file_path):
     )
     return response
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Batch Convert helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def find_batch_files(source_dir, recursive=True):
+    """Walk source_dir and return a list of paths that handle_load_file can load.
+
+    Recognised targets:
+    - *_pk4 directories  (FF3 character packs — passed as dirs, handle_load_file
+                          resolves the nested SGD automatically)
+    - *.pk4 files        (FF3 object / prop / room models)
+    - *.mdl files        (FF1 character models, PS2 or Xbox build)
+    - *.mpx files        (FF1 Xbox character models)
+    - *.pk2 files        (FF1/FF2 room models)
+
+    The Xbox model *pack* (.mpk) and accessory set (.acs) are deliberately not
+    listed: they are not standalone models and are resolved automatically by
+    the containers that own them.
+    """
+    results = []
+    seen = set()
+    file_exts = {'.pk4', '.mdl', '.mpx', '.pk2', '.mdlb', '.pk2b'}
+
+    def add(path):
+        norm = os.path.normcase(os.path.abspath(path))
+        if norm not in seen:
+            seen.add(norm)
+            results.append(path)
+
+    if recursive:
+        for root, dirs, files in os.walk(source_dir):
+            # Capture *_pk4 dirs as single units and skip walking into them
+            pk4_dirs = [d for d in dirs if d.lower().endswith('_pk4')]
+            for d in pk4_dirs:
+                add(os.path.join(root, d))
+            for d in pk4_dirs:
+                dirs.remove(d)
+
+            for f in files:
+                if os.path.splitext(f)[1].lower() in file_exts:
+                    add(os.path.join(root, f))
+    else:
+        for entry in sorted(os.listdir(source_dir)):
+            full = os.path.join(source_dir, entry)
+            if os.path.isdir(full):
+                if entry.lower().endswith('_pk4'):
+                    add(full)
+            elif os.path.splitext(entry)[1].lower() in file_exts:
+                add(full)
+
+    return results
+
+
+def batch_export_worker(job_id, source_dir, output_dir, fmt, options):
+    """Background thread: load each file and export it."""
+    recursive = options.get('recursive', True)
+    include_textures = options.get('include_textures', True)
+    include_colors = options.get('include_colors', True)
+    # Off by default: flattening the skeleton to its bind pose is wrong for
+    # anything that is going to be animated, and nothing that is not animated
+    # wants it either. The viewer no longer offers it as a choice.
+    tpose_only = options.get('tpose_only', False)
+    game = options.get('game', '')
+    conflict = options.get('conflict', 'skip')  # 'skip' or 'overwrite'
+    mirror_structure = options.get('mirror_structure', True)
+
+    def log(msg):
+        BATCH_JOBS[job_id]['log'].append(msg)
+
+    try:
+        files = find_batch_files(source_dir, recursive)
+        BATCH_JOBS[job_id]['total'] = len(files)
+
+        if not files:
+            BATCH_JOBS[job_id]['status'] = 'done'
+            BATCH_JOBS[job_id]['message'] = 'No convertible files found in the selected folder.'
+            return
+
+        for file_path in files:
+            if BATCH_JOBS[job_id].get('cancelled'):
+                BATCH_JOBS[job_id]['status'] = 'cancelled'
+                return
+
+            display = os.path.basename(file_path)
+            BATCH_JOBS[job_id]['current'] = display
+
+            try:
+                result = handle_load_file(file_path, game=game)
+                if 'error' in result:
+                    raise ValueError(result['error'])
+
+                model = CURRENT_STATE['model']
+                textures = CURRENT_STATE['textures'] if include_textures else []
+                model_type = CURRENT_STATE.get('model_type', 'model')
+
+                if not model:
+                    raise ValueError('No model parsed')
+
+                # Always derive the export name from the original input path,
+                # NOT from model.export_name: for _pk4 directories handle_load_file
+                # resolves them to the internal 0000.sgd, making export_name="0000".
+                export_name = os.path.splitext(display)[0]
+
+                if mirror_structure:
+                    # For directories, rel is relative to the parent of file_path;
+                    # for files, rel is relative to the file's directory.
+                    abs_fp = os.path.abspath(file_path)
+                    ref_dir = abs_fp if os.path.isdir(abs_fp) else os.path.dirname(abs_fp)
+                    rel = os.path.relpath(ref_dir, os.path.abspath(source_dir))
+                    # rel == '.' means the asset is directly in source_dir
+                    asset_dir = os.path.join(output_dir, rel, export_name) if rel != '.' else os.path.join(output_dir, export_name)
+                else:
+                    asset_dir = os.path.join(output_dir, export_name)
+
+                os.makedirs(asset_dir, exist_ok=True)
+                out_path = os.path.join(asset_dir, f"{export_name}.{fmt}")
+
+                if conflict == 'skip' and os.path.exists(out_path):
+                    BATCH_JOBS[job_id]['skipped'] += 1
+                    BATCH_JOBS[job_id]['done'] += 1
+                    log(f"⏭ Skipped (exists): {display}")
+                    continue
+
+                if textures and include_textures:
+                    tex_dir = os.path.join(asset_dir, f"{export_name}_textures")
+                    export_textures_png(model, textures, tex_dir)
+
+                include_armature = model_type != 'room'
+                if fmt in ('glb', 'gltf'):
+                    export_xbox_aware_glb(model, out_path, export_t_pose=tpose_only,
+                               include_vertex_colors=include_colors,
+                               textures=textures,
+                               include_armature=include_armature)
+                elif fmt == 'obj':
+                    export_xbox_aware_obj(model, out_path,
+                               include_vertex_colors=include_colors,
+                               textures=textures)
+                elif fmt == 'dae':
+                    export_dae(model, out_path, export_t_pose=tpose_only,
+                               include_vertex_colors=include_colors)
+                elif fmt == 'fbx':
+                    export_fbx(model, out_path, export_t_pose=tpose_only,
+                               include_vertex_colors=include_colors)
+                else:
+                    raise ValueError(f"Unsupported format: {fmt}")
+
+                BATCH_JOBS[job_id]['done'] += 1
+                log(f"✓ {display}")
+
+            except Exception as exc:
+                BATCH_JOBS[job_id]['failed'] += 1
+                BATCH_JOBS[job_id]['done'] += 1
+                err = f"✗ {display}: {str(exc)[:150]}"
+                BATCH_JOBS[job_id]['errors'].append(err)
+                log(err)
+
+        BATCH_JOBS[job_id]['status'] = 'done'
+        BATCH_JOBS[job_id]['current'] = ''
+
+    except Exception as exc:
+        BATCH_JOBS[job_id]['status'] = 'error'
+        BATCH_JOBS[job_id]['error'] = str(exc)
+
+
 class PZViewerHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=STATIC_DIR, **kwargs)
+
+    def end_headers(self):
+        # style.css and index.html are requested with no cache-busting token
+        # (only app.js carries ?v=), so the browser kept a stale copy after an
+        # edit and applied CSS that no longer matched the file on disk. That is
+        # what silently disabled the theme overrides. `no-store` is used rather
+        # than `no-cache` on purpose: entries cached before this header existed
+        # carry no validators, so the browser treats them as fresh and never
+        # revalidates, while no-store also forbids storing the new copy. These
+        # assets are a few KB served from localhost, so re-reading them is free.
+        if b'Cache-Control' not in getattr(self, '_headers_buffer', b''):
+            self.send_header('Cache-Control', 'no-store, must-revalidate')
+        super().end_headers()
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -1132,7 +1922,7 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
             qs = parse_qs(parsed.query)
             target_dir = qs.get('dir', [''])[0].strip()
             game = qs.get('game', ['all'])[0].lower()
-            saved_root = load_folder_preferences().get(game) if game in ("ff1", "ff2", "ff3") else ""
+            saved_root = load_folder_preferences().get(game) if game in GAME_IDS else ""
             if saved_root and not folder_is_within_root(target_dir, saved_root):
                 self.send_response(403)
                 self.send_header('Content-Type', 'application/json')
@@ -1142,12 +1932,7 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                     "root": saved_root.replace("\\", "/")
                 }).encode('utf-8'))
                 return
-            file_extensions = {
-                'ff1': ('.pk2', '.sgd', '.tim2'),
-                'ff2': ('.pk2', '.sgd', '.tim2', '.tm2'),
-                'ff3': ('.pk4', '.sgd', '.tm2'),
-                'all': ('.pk2', '.pk4', '.sgd', '.bmd', '.cld', '.obj', '.tm2', '.tim2', '.png'),
-            }.get(game, ('.pk2', '.pk4', '.sgd', '.bmd', '.cld', '.obj', '.tm2', '.tim2', '.png'))
+            file_extensions = GAME_EXTENSIONS.get(game, GAME_EXTENSIONS['all'])
             if not target_dir:
                 self.send_response(400)
                 self.send_header('Content-Type', 'application/json')
@@ -1163,11 +1948,17 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
             
             absolute_target = os.path.abspath(target_dir)
             parent_dir = os.path.dirname(absolute_target)
-            if saved_root and os.path.normcase(absolute_target) != os.path.normcase(
-                os.path.abspath(saved_root)
-            ):
-                if not folder_is_within_root(parent_dir, saved_root):
-                    parent_dir = os.path.abspath(saved_root)
+            if saved_root:
+                saved_root_abs = os.path.abspath(saved_root)
+                # The browser never walks out of the configured game folder. At
+                # the root itself the parent is therefore the root, so no
+                # ".. (Parent Directory)" row is offered and the up button is
+                # disabled: the real parent of the root is outside it and would
+                # otherwise be one click away.
+                if os.path.normcase(absolute_target) == os.path.normcase(saved_root_abs):
+                    parent_dir = saved_root_abs
+                elif not folder_is_within_root(parent_dir, saved_root_abs):
+                    parent_dir = saved_root_abs
             parent_dir = parent_dir.replace('\\', '/')
             items = []
             try:
@@ -1185,25 +1976,44 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                     anchor = numbered_sgds[0]         # e.g. "0000.sgd"
                     hidden_numbered = set(numbered_sgds[1:])  # hide the rest
 
+                # The Xbox .mdl set is hidden from the tree. Only two of its 64
+                # files can be read at all, by the PS2 parser, and only without
+                # textures -- the geometry records of the other 62 are not the
+                # ones it knows. Listing 64 rows that mostly open to an error is
+                # worse than not listing them; the .mpx next to each one is the
+                # container that really works. The load path still accepts them
+                # if the path is typed directly.
+                #
+                # Two ways of recognising the situation, because either one alone
+                # misses cases: browsing the ff1x root hides them wherever that
+                # root happens to point, and a folder literally named XBOX hides
+                # them even when reached by navigating in from the PS2 ff1 tree,
+                # where the request still says game=ff1.
+                hide_xbox_mdl = (game == 'ff1x' or os.path.basename(
+                    os.path.normpath(target_dir)).casefold() == 'xbox')
+
                 for entry in all_entries:
                     if entry in hidden_numbered:
                         continue
                     full_p = os.path.join(target_dir, entry)
                     is_dir = os.path.isdir(full_p)
                     ext = os.path.splitext(entry)[1].lower()
-                    if is_dir or ext in file_extensions:
-                        t_str = "dir" if is_dir else ext.lstrip('.')
-                        # Mark the anchor of a multi-part pack specially
-                        if entry in numbered_sgds and hidden_numbered:
-                            t_str = "sgd_pack"
-                        items.append({
-                            "name": entry if not hidden_numbered or entry not in numbered_sgds
-                                    else f"{entry}  (+{len(hidden_numbered)} parts)",
-                            "path": full_p.replace('\\', '/'),
-                            "type": t_str,
-                            "is_dir": is_dir,
-                            "size": os.path.getsize(full_p) if not is_dir else 0
-                        })
+                    if hide_xbox_mdl and ext == '.mdl':
+                        continue
+                    if not is_dir and ext not in file_extensions:
+                        continue
+                    t_str = "dir" if is_dir else ext.lstrip('.')
+                    # Mark the anchor of a multi-part pack specially
+                    if not is_dir and entry in numbered_sgds and hidden_numbered:
+                        t_str = "sgd_pack"
+                    items.append({
+                        "name": entry if not hidden_numbered or entry not in numbered_sgds
+                                else f"{entry}  (+{len(hidden_numbered)} parts)",
+                        "path": full_p.replace('\\', '/'),
+                        "type": t_str,
+                        "is_dir": is_dir,
+                        "size": 0 if is_dir else os.path.getsize(full_p)
+                    })
             except Exception as e:
                 pass
 
@@ -1221,11 +2031,7 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
             qs = parse_qs(parsed.query)
             init_dir = qs.get('dir', [''])[0]
             game = qs.get('game', ['all'])[0].lower()
-            picker_titles = {
-                'ff1': 'Select Fatal Frame 1 Files',
-                'ff2': 'Select Fatal Frame 2 Files',
-                'ff3': 'Select Fatal Frame 3 Files',
-            }
+            picker_titles = {game_id: 'Select ' + label for game_id, label in GAME_LABELS.items()}
             chosen = ""
             try:
                 import tkinter as tk
@@ -1242,7 +2048,7 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                 pass
 
             resp = {"status": "ok", "chosen": chosen.replace('\\', '/') if chosen else ""}
-            if resp["chosen"] and game in ("ff1", "ff2", "ff3"):
+            if resp["chosen"] and game in GAME_IDS:
                 try:
                     save_folder_preference(game, resp["chosen"])
                 except OSError as exc:
@@ -1253,11 +2059,28 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(resp).encode('utf-8'))
             return
 
+        elif parsed.path == '/api/batch_status':
+            qs = parse_qs(parsed.query)
+            job_id = qs.get('job', [''])[0]
+            job = BATCH_JOBS.get(job_id)
+            if not job:
+                self.send_response(404)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': 'Batch job not found'}).encode('utf-8'))
+                return
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(job).encode('utf-8'))
+            return
+
         elif parsed.path == '/api/load':
             qs = parse_qs(parsed.query)
             file_path = qs.get('path', [''])[0]
             try:
-                res = handle_load_file(file_path)
+                res = handle_load_file(file_path, qs.get("game", [""])[0],
+                                       xpr_override=qs.get("xpr", [""])[0])
                 status_code = 400 if "error" in res else 200
             except (OSError, ValueError, struct.error, RuntimeError) as exc:
                 progress = LoadProgress(file_path)
@@ -1270,50 +2093,33 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(res).encode('utf-8'))
             return
 
-        elif parsed.path == '/api/load_anim':
-            qs = parse_qs(parsed.query)
-            file_path = qs.get('path', [''])[0]
-            if not os.path.exists(file_path):
-                self.send_response(404)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": "Animation file not found"}).encode('utf-8'))
-                return
-            try:
-                if os.path.splitext(file_path)[1].lower() != '.bmd':
-                    raise ValueError("Only Project Zero 3 BMD animations are supported")
-                clip = parse_bmd_motion(
-                    file_path,
-                    name=os.path.splitext(os.path.basename(file_path))[0]
-                )
-                animations = [clip] if clip else []
-                CURRENT_STATE["animations"] = animations
-                resp = {
-                    "status": "ok",
-                    "animations": [
-                        {
-                            "name": c.name,
-                            "bone_num": c.bone_num,
-                            "num_frames": c.frame_num,
-                            "fps": c.fps,
-                            "frames": c.frames
-                        } for c in animations
-                    ]
-                }
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(resp).encode('utf-8'))
-            except Exception as e:
-                self.send_response(500)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": str(e)}).encode('utf-8'))
-            return
-
         elif parsed.path == '/api/export_textures':
             model = CURRENT_STATE.get("model")
             textures = CURRENT_STATE.get("textures", [])
+            if self.command == "POST":
+                try:
+                    content_length = int(self.headers.get("Content-Length", "0"))
+                    payload = json.loads(self.rfile.read(content_length) or b"{}")
+                    serialized_textures = payload.get("textures")
+                    if isinstance(serialized_textures, list):
+                        decoded_textures = []
+                        for record in serialized_textures:
+                            if not isinstance(record, dict):
+                                continue
+                            data_uri = record.get("data_uri")
+                            if not isinstance(data_uri, str) or "," not in data_uri:
+                                continue
+                            encoded = data_uri.split(",", 1)[1]
+                            image = Image.open(BytesIO(base64.b64decode(encoded))).convert("RGBA")
+                            decoded_textures.append(image)
+                        if decoded_textures:
+                            textures = decoded_textures
+                except (ValueError, TypeError, json.JSONDecodeError, binascii.Error) as exc:
+                    self.send_response(400)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({"error": f"Invalid texture payload: {exc}"}).encode('utf-8'))
+                    return
             if not model or not textures:
                 self.send_response(400)
                 self.send_header('Content-Type', 'application/json')
@@ -1350,39 +2156,39 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
         if parsed.path == '/api/export_textures':
             req = json.loads(post_data.decode('utf-8')) if post_data else {}
             model = CURRENT_STATE.get("model")
-            textures = req.get("textures")
-            if not model:
-                self.send_response(400)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": "No model loaded"}).encode('utf-8'))
-                return
-            if not isinstance(textures, list) or not textures:
-                self.send_response(400)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({"error": "No serialized textures were provided."}).encode('utf-8'))
-                return
-
-            source_file = CURRENT_STATE.get("source_file", "")
-            base_name = os.path.splitext(os.path.basename(source_file))[0] or getattr(
-                model, 'export_name', getattr(model, 'name', 'model')
-            )
-            tex_subfolder = os.path.join(EXPORTS_DIR, f"{base_name}_textures")
+            records = req.get("textures", [])
+            textures = []
             try:
-                saved = export_textures_png(model, textures, tex_subfolder)
-                zip_buf = BytesIO()
-                with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-                    for t_name, t_path, idx in saved:
-                        zf.write(t_path, arcname=t_name)
-                zip_bytes = zip_buf.getvalue()
-            except (OSError, ValueError) as exc:
+                for record in records:
+                    data_uri = record.get("data_uri", "")
+                    if not data_uri.startswith("data:image/") or ";base64," not in data_uri:
+                        raise ValueError("Texture record does not contain a base64 data_uri")
+                    encoded = data_uri.split(";base64,", 1)[1]
+                    image = Image.open(BytesIO(base64.b64decode(encoded, validate=True)))
+                    image.load()
+                    textures.append(image)
+            except (ValueError, binascii.Error, OSError) as exc:
                 self.send_response(400)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps({"error": f"Texture export failed: {exc}"}).encode('utf-8'))
+                self.wfile.write(json.dumps({"error": f"Invalid texture data: {exc}"}).encode('utf-8'))
                 return
-
+            if not model or not textures:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"error": "No texture records were supplied."}).encode('utf-8'))
+                return
+            base_name = os.path.splitext(os.path.basename(
+                req.get("filename", "") or CURRENT_STATE.get("source_file", "")
+            ))[0] or getattr(model, 'name', 'model')
+            tex_subfolder = os.path.join(EXPORTS_DIR, f"{base_name}_textures")
+            saved = export_textures_png(model, textures, tex_subfolder)
+            zip_buf = BytesIO()
+            with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for t_name, t_path, _idx in saved:
+                    zf.write(t_path, arcname=t_name)
+            zip_bytes = zip_buf.getvalue()
             self.send_response(200)
             self.send_header('Content-Type', 'application/zip')
             self.send_header('Content-Disposition', f'attachment; filename="{base_name}_textures.zip"')
@@ -1410,20 +2216,12 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
         if parsed.path == '/api/load':
             req = json.loads(post_data.decode('utf-8')) if post_data else {}
             file_path = req.get('path', '')
-            res = handle_load_file(file_path)
+            res = handle_load_file(file_path, req.get("game", ""))
             status_code = 400 if "error" in res else 200
             self.send_response(status_code)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
             self.wfile.write(json.dumps(res).encode('utf-8'))
-            return
-
-        elif parsed.path == '/api/detach_anim':
-            CURRENT_STATE["animations"] = []
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "ok", "message": "Animation detached"}).encode('utf-8'))
             return
 
         elif parsed.path in ('/api/export', '/api/export_collision'):
@@ -1508,8 +2306,8 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
             # ----------------------------------------------------
             include_colors = req.get('include_colors', True)
             include_textures = req.get('include_textures', True)
-            include_collision = req.get('include_collision', True)
-            tpose_only = req.get('tpose_only', True)
+            include_collision = req.get('include_collision', False)
+            tpose_only = req.get('tpose_only', False)
 
             model = CURRENT_STATE["model"]
             if not model:
@@ -1534,7 +2332,6 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
             out_path = os.path.join(asset_export_dir, export_filename)
 
             textures = CURRENT_STATE["textures"] if include_textures else []
-            animations = None if tpose_only else CURRENT_STATE["animations"]
 
             try:
                 # Always extract and convert textures to PNG in exports folder
@@ -1551,15 +2348,14 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                         if target != 'textures':
                             if fmt == 'obj_zip':
                                 obj_path = os.path.join(asset_export_dir, f"{base_name}.obj")
-                                export_obj(model, obj_path, include_vertex_colors=include_colors, textures=textures)
+                                export_xbox_aware_obj(model, obj_path, include_vertex_colors=include_colors, textures=textures)
                                 zf.write(obj_path, arcname=f"{base_name}.obj")
                                 mtl_path = os.path.join(asset_export_dir, f"{base_name}.mtl")
                                 if os.path.exists(mtl_path):
                                     zf.write(mtl_path, arcname=f"{base_name}.mtl")
                             else:
                                 glb_path = os.path.join(asset_export_dir, f"{base_name}.glb")
-                                export_glb(model, glb_path, export_t_pose=tpose_only,
-                                           animations=animations,
+                                export_xbox_aware_glb(model, glb_path, export_t_pose=tpose_only,
                                            include_vertex_colors=include_colors,
                                            textures=textures,
                                            include_armature=(CURRENT_STATE.get("model_type") != "room"))
@@ -1567,7 +2363,8 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
 
                         # Add all texture PNGs
                         for t_name, t_path, idx in saved_tex:
-                            zf.write(t_path, arcname=f"textures/{t_name}")
+                            zf.write(t_path, arcname=(t_name if fmt == 'obj_zip' and
+                                getattr(model, 'xbox_native_mpx', False) else f"textures/{t_name}"))
 
                     with open(zip_path, 'rb') as f:
                         file_bytes = f.read()
@@ -1581,22 +2378,19 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                     return
 
                 if fmt in ('glb', 'gltf'):
-                    export_glb(model, out_path, export_t_pose=tpose_only,
-                               animations=animations,
+                    export_xbox_aware_glb(model, out_path, export_t_pose=tpose_only,
                                include_vertex_colors=include_colors,
                                textures=textures,
                                include_armature=(CURRENT_STATE.get("model_type") != "room"))
                 elif fmt == 'obj':
-                    export_obj(model, out_path,
+                    export_xbox_aware_obj(model, out_path,
                                include_vertex_colors=include_colors,
                                textures=textures)
                 elif fmt == 'dae':
                     export_dae(model, out_path, export_t_pose=tpose_only,
-                               animations=animations,
                                include_vertex_colors=include_colors)
                 elif fmt == 'fbx':
                     export_fbx(model, out_path, export_t_pose=tpose_only,
-                               animations=animations,
                                include_vertex_colors=include_colors)
                 else:
                     raise ValueError(f"Unsupported export format: {fmt}")
@@ -1620,6 +2414,87 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(json.dumps({"error": f"Export failed: {str(e)}"}).encode('utf-8'))
                 return
+
+        elif parsed.path == '/api/batch_export':
+            req = json.loads(post_data.decode('utf-8')) if post_data else {}
+            source_dir = req.get('source_dir', '').strip()
+            output_dir = (req.get('output_dir', '') or '').strip()
+            fmt = req.get('format', 'glb').lower()
+            game = req.get('game', '')
+
+            if not source_dir or not os.path.isdir(source_dir):
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': f'Invalid source directory: {source_dir}'}).encode('utf-8'))
+                return
+
+            if not output_dir:
+                output_dir = os.path.join(EXPORTS_DIR, 'batch')
+            os.makedirs(output_dir, exist_ok=True)
+
+            # Auto-detect game from path if not provided
+            if not game:
+                path_lower = source_dir.lower().replace('\\', '/')
+                # The Wii release lives under "Project Zero 2 Wii", so the
+                # plain ff2 patterns below would also match it. Check it first
+                # because its containers are .mdlb/.pk2b, not .pk2.
+                if 'wii' in path_lower:
+                    game = 'ff2w'
+                elif '/ff3' in path_lower or 'ff3 modding' in path_lower or '/zero3' in path_lower:
+                    game = 'ff3'
+                elif '/ff2' in path_lower or 'fatal frame 2' in path_lower or '/zero2' in path_lower:
+                    game = 'ff2'
+                elif '/ff1' in path_lower or 'obscura' in path_lower or '/zero1' in path_lower:
+                    game = 'ff1'
+
+            job_id = uuid.uuid4().hex[:8]
+            BATCH_JOBS[job_id] = {
+                'status': 'running',
+                'total': 0,
+                'done': 0,
+                'failed': 0,
+                'skipped': 0,
+                'current': 'Scanning files...',
+                'errors': [],
+                'log': [],
+                'output_dir': output_dir.replace('\\', '/'),
+                'started': time.time(),
+            }
+
+            options = {
+                'recursive': req.get('recursive', True),
+                'include_textures': req.get('include_textures', True),
+                'include_colors': req.get('include_colors', True),
+                'tpose_only': req.get('tpose_only', True),
+                'game': game,
+                'conflict': req.get('conflict', 'skip'),
+                'mirror_structure': req.get('mirror_structure', True),
+            }
+
+            t = threading.Thread(
+                target=batch_export_worker,
+                args=(job_id, source_dir, output_dir, fmt, options),
+                daemon=True
+            )
+            t.start()
+
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'job_id': job_id, 'output_dir': output_dir.replace('\\', '/')}).encode('utf-8'))
+            return
+
+        elif parsed.path == '/api/batch_cancel':
+            req = json.loads(post_data.decode('utf-8')) if post_data else {}
+            job_id = req.get('job_id', '')
+            if job_id in BATCH_JOBS:
+                BATCH_JOBS[job_id]['cancelled'] = True
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({'status': 'cancel_requested'}).encode('utf-8'))
+            return
 
         self.send_error(404)
 

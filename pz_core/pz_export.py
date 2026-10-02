@@ -3,9 +3,7 @@ import json
 import struct
 import math
 import copy
-import base64
 from io import BytesIO
-from PIL import Image
 
 
 def _normalized_normal(normal):
@@ -81,40 +79,14 @@ def _merge_meshes_by_texture(model):
         target.indices.extend([[a + offset, b + offset, c + offset] for a, b, c in mesh.indices])
     return list(groups.values())
 
-def _texture_image(texture, index):
-    """Return a detached PIL image from a decoded image or serialized data URI."""
-    if isinstance(texture, Image.Image):
-        return texture
-    if not isinstance(texture, dict):
-        raise ValueError(f"Texture {index} has no decoded image data")
-
-    data_uri = texture.get("data_uri")
-    if not isinstance(data_uri, str) or not data_uri.strip():
-        raise ValueError(f"Texture {index} has missing or empty data_uri")
-    try:
-        header, encoded = data_uri.split(",", 1)
-        if ";base64" not in header.lower():
-            raise ValueError("data_uri is not base64 encoded")
-        image = Image.open(BytesIO(base64.b64decode(encoded, validate=True)))
-        image.load()
-        return image
-    except (ValueError, OSError) as exc:
-        raise ValueError(f"Texture {index} has invalid data_uri: {exc}") from exc
-
-
 def export_textures_png(model, textures, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     saved_files = []
-    if textures is None:
-        raise ValueError("No texture data was provided")
-    if not isinstance(textures, (list, tuple)):
-        raise ValueError("Texture data must be a list")
     if not textures:
         return saved_files
 
     base_name = getattr(model, 'name', 'model')
-    for idx, texture in enumerate(textures):
-        img = _texture_image(texture, idx)
+    for idx, img in enumerate(textures):
         mat_names = [m.name for m in getattr(model, 'materials', []) if getattr(m, 'texture_index', -1) == idx]
         if mat_names:
             clean_name = os.path.splitext(mat_names[0])[0].replace(' ', '_')
@@ -123,7 +95,9 @@ def export_textures_png(model, textures, output_dir):
             t_name = f"{base_name}_tex_{idx:02d}.png"
 
         t_path = os.path.join(output_dir, t_name)
-        img.save(t_path, format='PNG')
+        # Always write RGBA PNGs so zero and partial alpha survive export.
+        export_image = img.convert("RGBA")
+        export_image.save(t_path, format='PNG')
         saved_files.append((t_name, t_path, idx))
 
     return saved_files
@@ -224,7 +198,17 @@ def export_obj(model, output_path, include_vertex_colors=True, textures=None):
 
     return output_path
 
-def export_glb(model, output_path, export_t_pose=True, animations=None, include_vertex_colors=True, textures=None, save_textures_folder=True, include_armature=True):
+def export_glb(model, output_path, export_t_pose=True, include_vertex_colors=True, textures=None, save_textures_folder=True, include_armature=True):
+    # FF2 Wii assets are the only ones that need preparing first: the viewport
+    # scales them into FF3 viewer units while their bones stay in the file's own
+    # metres, and a rig 910x smaller than the mesh it drives looks fine at rest
+    # (the inverse bind matrices hide it) and explodes the moment a bone is
+    # posed. Doing it here rather than in the viewer means the CLI and the batch
+    # worker get it too, and no caller can forget.
+    if getattr(model, "ff2w_applied_scale", None):
+        from .pz_mdlb_ff2w import build_ff2w_export_model
+        model = build_ff2w_export_model(model)
+
     base_name = os.path.splitext(os.path.basename(output_path))[0]
     out_dir = os.path.dirname(output_path) or "."
     if textures and save_textures_folder:
@@ -423,7 +407,14 @@ def export_glb(model, output_path, export_t_pose=True, animations=None, include_
     # Export the same armature layout as the reference exporter: an Armature
     # root, local bone matrices, and inverse bind matrices from bone space.
     bones = list(getattr(model, "bones", [])) if include_armature else []
+    # Names only, and only as a fallback. The hierarchy always comes from the
+    # parsed bone.parent: a hardcoded index->parent table cannot be right for
+    # more than one rig, and it disagreed with FF3's own file in 20 of 26 bones
+    # while scrambling the FF2 Wii rig completely. When the parser carried a
+    # real name through (FF2 Wii reads it out of ENOB) that wins; otherwise
+    # these friendly labels apply, which fit the FF3 rig the indices came from.
     bone_names = {
+        0: "root",
         3: "hips", 12: "left leg", 8: "left knee", 5: "left ankle",
         23: "right leg", 19: "right knee", 16: "right ankle",
         25: "spine", 1: "chest", 14: "neck", 2: "head",
@@ -433,12 +424,6 @@ def export_glb(model, output_path, export_t_pose=True, animations=None, include_
         21: "right arm", 22: "Bone_22", 18: "right elbow",
         24: "Bone_24", 17: "right wrist"
     }
-    bone_parents = {
-        3: -1, 12: 3, 8: 12, 5: 8, 23: 3, 19: 23, 16: 19,
-        25: 3, 1: 25, 14: 1, 2: 14, 4: 2, 15: 2, 9: 1,
-        10: 9, 11: 10, 7: 11, 13: 7, 6: 13, 20: 1, 21: 20,
-        22: 21, 18: 22, 24: 18, 17: 24
-    }
     if bones:
         armature_node = len(gltf["nodes"])
         gltf["nodes"].append({"name": "Armature", "children": []})
@@ -446,7 +431,7 @@ def export_glb(model, output_path, export_t_pose=True, animations=None, include_
         local_matrices = []
         for bone in bones:
             joint_nodes.append(len(gltf["nodes"]))
-            parent = bone_parents.get(bone.index, getattr(bone, "parent", -1))
+            parent = getattr(bone, "parent", -1)
             bone_matrix = list(getattr(bone, "matrix", []))
             if 0 <= parent < len(bones):
                 parent_matrix = list(getattr(bones[parent], "matrix", []))
@@ -454,10 +439,12 @@ def export_glb(model, output_path, export_t_pose=True, animations=None, include_
             else:
                 local_matrix = bone_matrix
             local_matrices.append(local_matrix)
-            name = bone_names.get(bone.index, f"Bone_{bone.index:02d}")
+            name = (getattr(bone, "name", None)
+                    or bone_names.get(bone.index)
+                    or f"Bone_{bone.index:02d}")
             gltf["nodes"].append({"name": name, "matrix": local_matrix})
         for i, bone in enumerate(bones):
-            parent = bone_parents.get(bone.index, getattr(bone, "parent", -1))
+            parent = getattr(bone, "parent", -1)
             if 0 <= parent < len(joint_nodes):
                 gltf["nodes"][joint_nodes[parent]].setdefault("children", []).append(joint_nodes[i])
             else:
@@ -499,7 +486,7 @@ def export_glb(model, output_path, export_t_pose=True, animations=None, include_
 
     return output_path
 
-def export_dae(model, output_path, export_t_pose=True, animations=None, include_vertex_colors=True):
+def export_dae(model, output_path, export_t_pose=True, include_vertex_colors=True):
     # COLLADA 1.4 exporter
     out_lines = []
     out_lines.append('<?xml version="1.0" encoding="utf-8"?>')
@@ -613,7 +600,7 @@ def export_dae(model, output_path, export_t_pose=True, animations=None, include_
 
     return output_path
 
-def export_fbx(model, output_path, export_t_pose=True, animations=None, include_vertex_colors=True):
+def export_fbx(model, output_path, export_t_pose=True, include_vertex_colors=True):
     # ASCII FBX 7.4 exporter
     out_lines = [
         "; FBX 7.4.0 project",

@@ -21,6 +21,50 @@
   --border-color: #2e3240;
   --border-light: #3f4458;
   --font-mono: 'Consolas', 'Courier New', monospace;
+
+  /* ── Themed tokens ──────────────────────────────────────────────────────
+     Every value below is the literal that used to be hardcoded in a rule.
+     Keeping them here means a theme is a single override block at the end
+     of this file and the default look can never drift.                */
+  --on-accent: #fff;                 /* ink on a filled accent button */
+  --on-panel: #fff;                  /* ink on dark panels / icon hover */
+  --view-bg: #0b0c10;                /* area behind the 3D canvas */
+  --panel-glass: rgba(26, 28, 34, 0.88);
+  --scrim-soft: rgba(0, 0, 0, 0.45);
+  --scrim: rgba(0, 0, 0, 0.7);
+  --overlay-bg: rgba(18, 19, 22, 0.75);
+  --label-scrim: rgba(0, 0, 0, 0.7);
+  --texture-grid-bg: #08090b;
+  --shadow-soft: rgba(0, 0, 0, 0.4);
+  --shadow-panel: rgba(0, 0, 0, 0.5);
+  --danger-solid: #dc2626;
+  --danger-solid-hover: #b91c1c;
+  --ok-text: #34d399;
+  --ok-core: #10b981;
+  --ok-tint: rgba(16, 185, 129, 0.12);
+  --ok-tint-border: rgba(16, 185, 129, 0.3);
+  --warn-text: #facc15;
+  --root-text: #a78bfa;
+  --link-text: #38bdf8;
+  --spinner-track: rgba(99, 102, 241, 0.2);
+  --progress-track: #1e293b;
+  --progress-border: #334155;
+  --progress-a: #6366f1;
+  --progress-b: #38bdf8;
+  --log-bg: #0f172a;
+  --log-border: #1e293b;
+  --log-text: #94a3b8;
+  --log-ok: #4ade80;
+  --log-skip: #fbbf24;
+  --log-err: #f87171;
+  --field-bg: #1e293b;               /* inline-styled text fields */
+  --field-border: #334155;
+  --field-text: #e2e8f0;
+  --slate-text: #94a3b8;
+  --slate-dim: #64748b;
+  --done-bg: #0f3d1e;
+  --done-border: #166534;
+  --extract-bg: #0284c7;
 }
 
 body {
@@ -70,42 +114,6 @@ body {
   letter-spacing: 0.5px;
 }
 
-.badge {
-  font-size: 10px;
-  background: var(--accent-color);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.topbar-divider {
-  width: 1px;
-  height: 22px;
-  background: var(--border-color);
-}
-
-.gpu-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: rgba(16, 185, 129, 0.12);
-  border: 1px solid rgba(16, 185, 129, 0.3);
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #34d399;
-}
-
-.gpu-dot {
-  width: 7px;
-  height: 7px;
-  background-color: #10b981;
-  border-radius: 50%;
-  box-shadow: 0 0 6px #10b981;
-}
-
 /* Buttons */
 .btn {
   padding: 6px 12px;
@@ -123,7 +131,7 @@ body {
 
 .btn-primary {
   background-color: var(--accent-color);
-  color: #fff;
+  color: var(--on-accent);
 }
 .btn-primary:hover {
   background-color: var(--accent-hover);
@@ -150,11 +158,11 @@ body {
 }
 
 .btn-danger {
-  background-color: #dc2626;
-  color: #fff;
+  background-color: var(--danger-solid);
+  color: var(--on-accent);
 }
 .btn-danger:hover {
-  background-color: #b91c1c;
+  background-color: var(--danger-solid-hover);
 }
 
 .btn-icon {
@@ -166,20 +174,8 @@ body {
   border-radius: 4px;
 }
 .btn-icon:hover {
-  color: #fff;
+  color: var(--on-panel);
   background: var(--bg-tertiary);
-}
-
-.btn-toggle {
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-.btn-toggle.active {
-  background-color: var(--accent-color);
-  border-color: var(--accent-hover);
-  color: #fff;
 }
 
 /* Main Content Layout */
@@ -281,6 +277,15 @@ body {
   font-size: 11px;
 }
 
+/* The saved roots moved out of .file-list into their own container so that
+   redrawing them stops erasing the directory listing. They kept the same
+   typography, which they used to inherit from .file-list and would otherwise
+   have silently fallen back to the sidebar's font. */
+#saved-roots {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
 .export-destination {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
@@ -315,26 +320,38 @@ body {
   overflow-y: auto;
 }
 
+/* The layers panel is a floating tool over the 3D view, not a modal dialog, so
+   the full-screen layer it sits in must not intercept anything: pointer-events
+   are off for the layer and back on for the panel itself, which leaves the
+   canvas underneath orbitable and clickable with the list open -- minimised or
+   not. There is no scrim either, because dimming the viewport is exactly what
+   the panel was used to do to a view you are meant to be inspecting. */
 .layers-modal {
   position: fixed;
   inset: 0;
   z-index: 30;
-  background: rgba(0, 0, 0, 0.45);
   display: flex;
   align-items: flex-start;
   justify-content: flex-end;
   padding: 70px 24px;
+  pointer-events: none;
 }
 
 .layers-modal.hidden { display: none; }
 .layers-modal-content {
+  pointer-events: auto;
+  position: relative;
   width: 340px;
   max-height: 70vh;
   padding: 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-light);
   border-radius: 6px;
-  box-shadow: 0 12px 30px rgba(0,0,0,.5);
+  box-shadow: 0 12px 30px var(--shadow-panel);
+}
+.layers-modal-content.dragging {
+  user-select: none;
+  box-shadow: 0 18px 40px var(--shadow-panel);
 }
 .layers-modal-header, .layers-actions {
   display: flex;
@@ -343,9 +360,38 @@ body {
   gap: 8px;
   margin-bottom: 8px;
 }
+/* The header is the drag handle. The buttons inside it opt out in JS, so a
+   click on ✖ or ▾ is a click on that button and not the start of a drag. */
+.layers-modal-header {
+  cursor: grab;
+  touch-action: none;
+}
+.layers-modal-header:active {
+  cursor: grabbing;
+}
 .layers-modal-content #mesh-layers {
   max-height: calc(70vh - 80px);
   overflow-y: auto;
+}
+
+/* Minimised: only the title bar is left, so the panel keeps showing which asset
+   it belongs to without covering the viewport. The list is not unmounted, just
+   not displayed, so collapsing and expanding costs nothing and the scroll
+   position survives. */
+.layers-modal.minimized .layers-actions,
+.layers-modal.minimized #mesh-layers {
+  display: none;
+}
+.layers-modal.minimized .layers-modal-header {
+  margin-bottom: 0;
+}
+.layers-modal.minimized .layers-modal-content {
+  max-height: none;
+  padding: 8px 12px;
+}
+#btn-layers-minimize {
+  font-size: 12px;
+  line-height: 1;
 }
 
 .mesh-layer-row {
@@ -378,6 +424,57 @@ body {
   padding: 6px 8px;
   font-size: 10px;
 }
+/* ── Asset Browser tabs ──────────────────────────────────────────────────
+   Two groups of saved roots: the three PS2 releases, and the Wii port on its
+   own. Drawn as a joined pair rather than two buttons so it reads as one
+   selector -- the active half is filled, the other is only outlined. */
+.root-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.root-tab {
+  flex: 1 1 0;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.root-tab:hover {
+  color: var(--text-primary);
+  border-color: var(--border-light);
+}
+
+.root-tab.active {
+  color: var(--on-accent);
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  font-weight: 600;
+}
+
+/* Same reason as the viewport buttons: what is selected is shown by what is on
+   screen, not by a ring left on whichever control was clicked last. */
+.root-tab:focus {
+  outline: none;
+}
+
+/* The empty-folder state: the message, and the way out as a row of the tree
+   rather than a button that would look like part of the app chrome. */
+.empty-folder {
+  padding: 0;
+}
+
+.empty-folder .loading-hint {
+  padding: 6px 6px 8px;
+}
+
 .browser-location {
   color: var(--text-muted);
   font: 10px var(--font-mono);
@@ -391,7 +488,7 @@ body {
   color: var(--text-primary);
 }
 .file-item.dir {
-  color: #facc15;
+  color: var(--warn-text);
   font-weight: 600;
   padding-top: 2px;
   padding-bottom: 2px;
@@ -399,7 +496,7 @@ body {
 }
 
 .file-item.saved-root {
-  color: #a78bfa;
+  color: var(--root-text);
   border-bottom: 1px solid var(--border-color);
   border-radius: 0;
   font-weight: 600;
@@ -416,7 +513,7 @@ body {
   padding: 2px 4px;
 }
 .file-item.file-sgd {
-  color: #34d399;
+  color: var(--ok-text);
 }
 
 /* Stats Table */
@@ -461,27 +558,63 @@ body {
 
 .texture-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  /* max-content, not the default auto. The cards are <button>s, and a button
+     sizes its own content box to an empty line box (~26px) whatever is inside
+     it -- including absolutely positioned children. With plain auto rows the
+     track took that 26px, the card's aspect-ratio box overflowed it, and every
+     card landed on top of the one above: the Solitaire stack. Sizing the row to
+     the card's max-content height is what puts the square back. */
+  grid-auto-rows: max-content;
+  gap: 12px;
+  padding: 2px;
   max-height: 300px;
   overflow-y: auto;
 }
 
+/* The cards are square VRAM slots, not thumbnails of each texture's real
+   proportions: a 128x32 strip has to read as one slot among thirty, and the grid
+   stays even no matter what aspect the decoded image turns out to be.
+
+   The image is taken out of flow on purpose. Left in flow, its own intrinsic
+   height set the height of the grid row while the card's aspect-ratio box
+   overflowed it, so the cards in a column overlapped each other by most of
+   their height -- which is why they read as one continuous strip. An absolutely
+   positioned image cannot contribute to the row, so the row is exactly the
+   square the card asked for. */
 .texture-card {
   aspect-ratio: 1;
-  background: #08090b;
+  min-width: 0;
+  min-height: 0;
+  background: var(--texture-grid-bg);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   position: relative;
+  cursor: zoom-in;
+  transition: border-color 0.12s ease;
 }
 
+.texture-card:hover {
+  border-color: var(--accent-color);
+}
+
+.texture-card:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+
+/* Inset from the frame as well as the grid gap: a strip that fills its whole
+   page used to run straight into its neighbours and read as one image. */
 .texture-card img {
-  max-width: 100%;
-  max-height: 100%;
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  width: calc(100% - 8px);
+  height: calc(100% - 8px);
+  object-fit: contain;
   image-rendering: pixelated;
 }
 
@@ -490,18 +623,120 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(0,0,0,0.7);
+  background: var(--label-scrim);
   font-size: 9px;
   padding: 1px 2px;
   text-align: center;
   font-family: var(--font-mono);
+  pointer-events: none;
+}
+
+/* ── Texture preview (lightbox) ───────────────────────────────────────────
+   One decoded texture at full size. The backdrop is what dims the rest of the
+   tool while it is up; clicking it closes, as does the button or Escape.
+   Nothing about it is themed by hand -- it reuses the palette variables, so
+   every theme gets the same behaviour. */
+#texture-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+#texture-preview.hidden {
+  display: none;
+}
+
+#texture-preview .preview-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--overlay-bg);
+  backdrop-filter: brightness(0.62) saturate(0.85);
+  -webkit-backdrop-filter: brightness(0.62) saturate(0.85);
+  animation: preview-fade 0.14s ease-out;
+}
+
+#texture-preview .preview-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  max-width: min(1100px, 94vw);
+  max-height: 92vh;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  animation: preview-rise 0.16s ease-out;
+}
+
+#texture-preview .preview-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+}
+
+#texture-preview .preview-title {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+#texture-preview .preview-meta {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  margin-left: auto;
+}
+
+/* Padded and checked, so a texture with an alpha channel is readable instead
+   of floating on an ambiguous background. */
+#texture-preview .preview-image-wrap {
+  padding: 12px;
+  background-color: var(--texture-grid-bg);
+  background-image:
+    linear-gradient(45deg, var(--bg-primary) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--bg-primary) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--bg-primary) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--bg-primary) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  overflow: auto;
+}
+
+#texture-preview .preview-image {
+  display: block;
+  width: auto;
+  height: auto;
+  /* A 32x32 VRAM page at 1:1 is a stamp, and reading its texels is the whole
+     point of opening it, so a small page is blown up until it is legible.
+     pixelated keeps the texel grid crisp at the non-integer factor. */
+  min-width: min(440px, 62vw);
+  max-width: 100%;
+  max-height: calc(92vh - 110px);
+  image-rendering: pixelated;
+}
+
+@keyframes preview-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes preview-rise {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 /* 3D Viewport */
 .viewport-container {
   flex: 1;
   position: relative;
-  background-color: #0b0c10;
+  background-color: var(--view-bg);
   overflow: hidden;
 }
 
@@ -521,7 +756,7 @@ body {
   position: absolute;
   top: 12px;
   left: 12px;
-  background: rgba(26, 28, 34, 0.88);
+  background: var(--panel-glass);
   backdrop-filter: blur(8px);
   border: 1px solid var(--border-color);
   padding: 6px 10px;
@@ -538,6 +773,40 @@ body {
   gap: 6px;
 }
 
+/* Xbox recolour switch: anchored in the corner opposite the viewport control
+   bar, which sits at top-left. Kept out of that bar so it can live in its own
+   corner without disturbing the existing controls. */
+.xpr-variant-btn {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  font-size: 11px;
+  background: var(--panel-glass);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.xpr-variant-btn:hover {
+  border-color: var(--accent-color);
+  color: var(--text-primary);
+}
+
+.xpr-variant-btn .xpr-variant-label {
+  color: var(--text-secondary);
+}
+
+.xpr-variant-btn.hidden {
+  display: none;
+}
+
 .control-group select {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
@@ -552,113 +821,6 @@ body {
 .control-group input[type="checkbox"] {
   accent-color: var(--accent-color);
   cursor: pointer;
-}
-
-/* Animation Panel */
-.anim-panel {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: rgba(26, 28, 34, 0.95);
-  backdrop-filter: blur(10px);
-  border-top: 1px solid var(--border-color);
-  padding: 8px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  z-index: 5;
-}
-
-.anim-panel.hidden {
-  display: none;
-}
-
-.anim-top-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.anim-mode-toggles {
-  display: flex;
-  gap: 6px;
-}
-
-.clip-selector {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-}
-
-.clip-selector select {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  padding: 3px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  outline: none;
-  min-width: 140px;
-}
-
-.anim-extra-actions {
-  display: flex;
-  gap: 6px;
-}
-
-.anim-control-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.btn-icon-lg {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  font-size: 14px;
-  padding: 4px 10px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.btn-icon-lg:hover {
-  background: var(--bg-hover);
-}
-
-#timeline-slider {
-  flex: 1;
-  height: 5px;
-  accent-color: var(--accent-color);
-  cursor: pointer;
-}
-
-.frame-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--text-secondary);
-  min-width: 90px;
-  text-align: right;
-}
-
-.speed-control {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.speed-control select {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  outline: none;
 }
 
 /* Modal */
@@ -678,7 +840,7 @@ body {
 .modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: var(--scrim);
   backdrop-filter: blur(4px);
 }
 
@@ -690,7 +852,7 @@ body {
   width: 480px;
   max-width: 90vw;
   max-height: 90vh;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 20px 25px -5px var(--shadow-panel);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -823,10 +985,10 @@ body {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-left: 4px solid var(--accent-color);
-  color: #fff;
+  color: var(--on-panel);
   padding: 10px 16px;
   border-radius: 4px;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 15px -3px var(--shadow-soft);
   font-size: 12px;
   z-index: 200;
   display: none;
@@ -845,7 +1007,7 @@ body {
 .spinner-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(18, 19, 22, 0.75);
+  background: var(--overlay-bg);
   backdrop-filter: blur(3px);
   display: none;
   align-items: center;
@@ -860,7 +1022,7 @@ body {
 .spinner {
   width: 36px;
   height: 36px;
-  border: 3px solid rgba(99, 102, 241, 0.2);
+  border: 3px solid var(--spinner-track);
   border-top-color: var(--accent-color);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
@@ -871,4 +1033,937 @@ body {
 .spinner-text {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+/* -- Batch Convert ------------------------------------- */
+.batch-progress-bar-track {
+  height: 10px;
+  background: var(--progress-track);
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid var(--progress-border);
+}
+.batch-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--progress-a), var(--progress-b));
+  border-radius: 5px;
+  transition: width 0.4s ease;
+}
+.batch-log {
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--log-bg);
+  border: 1px solid var(--log-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--log-text);
+}
+.batch-log .log-ok   { color: var(--log-ok); }
+.batch-log .log-skip { color: var(--log-skip); }
+.batch-log .log-err  { color: var(--log-err); }
+
+/* ══ Themes ═══════════════════════════════════════════════════════════
+   The active theme is a data-theme attribute on <html> (set in <head>
+   before first paint, so there is no flash of the wrong palette).
+   A theme only ever re-points existing custom properties, so it can
+   never move, resize or reflow a single element.
+   ══════════════════════════════════════════════════════════════════════ */
+
+/* The bar's right-hand cluster. It had no rule at all, so it only lined up by
+   accident: buttons are inline-level by default, and as soon as the theme
+   picker became a flex container it claimed a line of its own and pushed Batch
+   Convert and Export down the bar. This is what puts all three on one row. */
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+/* ── Credits / How-to dialogs ─────────────────────────────────────────────
+   Read-only text. The layout is a label column and a value column so the two
+   read as a list of facts rather than as prose, and it uses only the palette
+   variables, so every theme styles it without a per-theme rule. */
+.info-body section {
+  margin-bottom: 14px;
+}
+
+.info-body section:last-child {
+  margin-bottom: 0;
+}
+
+.info-body h4 {
+  color: var(--text-muted);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.info-body p {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.info-row {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.info-row b {
+  color: var(--accent-color);
+}
+
+/* The reference projects open in a new tab, so they read as links rather than
+   as more coloured text: underline on the name, and a visible underline while
+   the pointer is on it so it is not something you have to guess at. */
+.info-row a {
+  color: var(--link-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.info-row a:hover {
+  color: var(--accent-color);
+}
+
+.info-keys {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4px 0 6px;
+  font-size: 12px;
+}
+
+.info-keys td {
+  padding: 3px 0;
+  vertical-align: top;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.info-keys td:first-child {
+  width: 34%;
+  padding-right: 10px;
+  white-space: nowrap;
+}
+
+/* The dialog's watermark: the viewer's own icon, large and faint, behind the
+   text. The body is the positioning context and the text is raised above it with
+   a z-index, because an absolutely positioned image with no z-index would paint
+   over the paragraphs and swallow the clicks on the links. */
+.watermark-host {
+  position: relative;
+  overflow: hidden;
+}
+
+.watermark-host .watermark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  /* -50% of its own width, so translate moves the image's middle onto the
+     container's middle rather than its corner. */
+  transform: translate(-50%, -50%);
+  width: 78%;
+  max-width: 420px;
+  pointer-events: none;
+  user-select: none;
+  /* Low enough to read the text straight through it, high enough that you can
+     tell what it is. */
+  opacity: 0.1;
+  z-index: 0;
+}
+
+.watermark-host > *:not(.watermark) {
+  position: relative;
+  z-index: 1;
+}
+
+.info-keys td:first-child b {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* ── Theme picker (topbar) ────────────────────────────────────────────────
+   A button plus a menu, not a <select>: the rows carry pictures (the two FF2
+   cameras, the viewer's own icon for 'dynamic'), and a native select cannot
+   hold an <img> inside an <option>. Positioned so the menu drops out of the
+   bar's flow instead of stretching it. */
+.theme-picker {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+#btn-themes {
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+
+.themes-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 168px;
+  padding: 4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-light);
+  border-radius: 6px;
+  box-shadow: 0 12px 30px var(--shadow-panel);
+}
+
+.themes-menu.hidden {
+  display: none;
+}
+
+.theme-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.theme-row:hover {
+  background: var(--bg-hover);
+}
+
+/* The check sits on the right so every label starts at the same x, which is
+   what makes the list scannable. */
+.theme-row .theme-check {
+  margin-left: auto;
+  color: var(--accent-color);
+  font-size: 11px;
+}
+
+.theme-row .theme-icon {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.theme-row .theme-icon img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  image-rendering: auto;
+}
+
+/* ── FF3 Theme ───────────────────────────────────────────────────────────
+   Project Zero 3 in-game Setup menu: near-black cold surfaces, a teal
+   mist glow, and the antique gold of the highlighted row.
+   Gold is a highlight only: titles, small labels and the active item.
+   ---------------------------------------------------------------------- */
+[data-theme="ff3"] {
+  /* surfaces */
+  --bg-primary: #05090c;             /* --bg-deep   */
+  --bg-secondary: #0b1114;          /* --bg-panel  */
+  --bg-tertiary: #121b1f;           /* --bg-raised */
+  --bg-hover: #16323a;              /* --accent-glow */
+
+  /* accent */
+  --accent-color: #3d8f99;          /* teal: selection, active, focus */
+  --accent-hover: #52a3ae;
+  --accent-green: #5f9e6f;
+  --accent-red: #b4553f;
+  --accent-cyan: #63b3bd;
+  --on-accent: #060b0d;             /* dark ink reads on teal fill */
+
+  /* text */
+  --text-primary: #e8e2d4;
+  --text-secondary: #9aa8a8;
+  --text-muted: #6b7f83;
+  --on-panel: #e8e2d4;
+
+  /* lines */
+  --border-color: #1e2f35;
+  --border-light: #2c464e;
+
+  /* scrims, glass, wells */
+  --view-bg: #070c0e;
+  --panel-glass: rgba(7, 12, 14, 0.86);
+  --scrim-soft: rgba(3, 6, 8, 0.62);
+  --scrim: rgba(3, 6, 8, 0.78);
+  --overlay-bg: rgba(5, 9, 12, 0.82);
+  --label-scrim: rgba(4, 8, 10, 0.8);
+  --texture-grid-bg: #070c0e;
+  --shadow-soft: rgba(0, 0, 0, 0.55);
+  --shadow-panel: rgba(0, 0, 0, 0.65);
+
+  /* status + category colours */
+  --danger-solid: #b4553f;
+  --danger-solid-hover: #8f4231;
+  --ok-text: #7fb98d;
+  --ok-core: #5f9e6f;
+  --ok-tint: rgba(95, 158, 111, 0.14);
+  --ok-tint-border: rgba(95, 158, 111, 0.32);
+  --warn-text: #c9a961;              /* gold marks the highlighted item */
+  --root-text: #6f9aa1;
+  --link-text: #63b3bd;
+
+  /* progress + batch log */
+  --spinner-track: rgba(61, 143, 153, 0.2);
+  --progress-track: #0f1c20;
+  --progress-border: #1e2f35;
+  --progress-a: #3d8f99;
+  --progress-b: #63b3bd;
+  --log-bg: #070c0e;
+  --log-border: #1e2f35;
+  --log-text: #9aa8a8;
+  --log-ok: #7fb98d;
+  --log-skip: #c9a961;
+  --log-err: #b4553f;
+
+  /* inline-styled fields + batch progress readouts */
+  --field-bg: #121b1f;
+  --field-border: #2c464e;
+  --field-text: #e8e2d4;
+  --slate-text: #9aa8a8;
+  --slate-dim: #6b7f83;
+  --done-bg: #0d1f18;
+  --done-border: #2c464e;
+  --extract-bg: #2a666e;
+
+  /* the FF3 gold, reserved for small accents */
+  --gold: #c9a961;
+  --gold-bright: #e8d9a0;
+  --gold-deep: #8a6f34;
+}
+
+/* Gold accents: title, dialog headings and the theme control itself. */
+[data-theme="ff3"] .logo h1 {
+  color: var(--gold-bright);
+}
+[data-theme="ff3"] .modal-header h2 {
+  color: var(--gold-bright);
+}
+[data-theme="ff3"] #btn-themes {
+  color: var(--gold-bright);
+  border-color: var(--gold-deep);
+}
+[data-theme="ff3"] #btn-themes:hover {
+  border-color: var(--gold);
+}
+[data-theme="ff3"] .btn-icon:hover {
+  color: var(--gold-bright);
+}
+[data-theme="ff3"] .file-item.dir:hover {
+  color: var(--gold-bright);
+}
+
+/* Teal mist glow — shadows only, so nothing reflows. */
+[data-theme="ff3"] .topbar {
+  box-shadow: 0 8px 22px -14px rgba(61, 143, 153, 0.75);
+}
+[data-theme="ff3"] .viewport-controls {
+  box-shadow: 0 10px 26px -14px rgba(61, 143, 153, 0.6);
+}
+[data-theme="ff3"] .layers-modal-content,
+[data-theme="ff3"] .modal-content {
+  box-shadow: 0 0 0 1px rgba(61, 143, 153, 0.12), 0 18px 34px rgba(0, 0, 0, 0.65);
+}
+
+/* Native controls: colour only, widths untouched. */
+[data-theme="ff3"] input[type="checkbox"],
+[data-theme="ff3"] input[type="radio"],
+[data-theme="ff3"] input[type="range"] {
+  accent-color: var(--accent-color);
+}
+[data-theme="ff3"] .sidebar,
+[data-theme="ff3"] .file-list,
+[data-theme="ff3"] .layers-panel,
+[data-theme="ff3"] .layers-modal-content,
+[data-theme="ff3"] .texture-grid,
+[data-theme="ff3"] .batch-log,
+[data-theme="ff3"] .modal-body,
+[data-theme="ff3"] #mesh-layers {
+  scrollbar-color: var(--border-light) var(--bg-primary);
+  scrollbar-width: auto;
+}
+
+/* ── FF1 Xbox Theme ──────────────────────────────────────────────────────
+   The FF1 palette again, shifted a little: the same near-black cold brown, the
+   same antique brass and parchment, the same one cool note for the gauges. Only
+   the values move -- surfaces a shade cooler, the blue a shade greener, the
+   brass a shade paler -- because this is the Xbox build of the same game, not a
+   different game. Listed directly under FF1 for that reason.
+   ---------------------------------------------------------------------- */
+[data-theme="ff1x"] {
+  /* surfaces: FF1's cold brown, half a step cooler */
+  --bg-primary: #090a08;             /* --bg-deep   */
+  --bg-secondary: #16140f;          /* --bg-panel  */
+  --bg-tertiary: #211d14;           /* --bg-raised */
+  --bg-sunken: #0f0e09;             /* inset wells */
+  --bg-hover: #2c2516;              /* brass-lit brown */
+
+  /* the one cool accent, greener than FF1's */
+  --accent-color: #63a6b8;
+  --accent-hover: #7ab3c4;
+  --accent-cyan: #7ab3c4;
+  --accent-green: #74a066;
+  --accent-red: #a54c3e;
+  --on-accent: #07141a;
+
+  /* parchment text, a touch paler */
+  --text-primary: #e8e2ce;
+  --text-secondary: #a59880;
+  --text-muted: #7c7059;
+  --on-panel: #e8e2ce;
+
+  /* brass rules */
+  --border-color: #383026;
+  --border-light: #5e4b30;
+
+  /* scrims, glass, wells */
+  --view-bg: #090a08;
+  --panel-glass: rgba(22, 20, 15, 0.9);
+  --scrim-soft: rgba(4, 4, 2, 0.55);
+  --scrim: rgba(4, 4, 2, 0.75);
+  --overlay-bg: rgba(9, 10, 8, 0.82);
+  --label-scrim: rgba(7, 8, 5, 0.8);
+  --texture-grid-bg: #0f0e09;
+  --shadow-soft: rgba(0, 0, 0, 0.5);
+  --shadow-panel: rgba(0, 0, 0, 0.62);
+
+  /* status + category colours; "positive" reads as brass */
+  --danger-solid: #a54c3e;
+  --danger-solid-hover: #823e30;
+  --ok-text: #ccb57c;
+  --ok-core: #bca062;
+  --ok-tint: rgba(188, 160, 98, 0.12);
+  --ok-tint-border: rgba(188, 160, 98, 0.3);
+  --warn-text: #bca062;
+  --root-text: #8d7436;
+  --link-text: #7ab3c4;
+
+  /* progress + batch log */
+  --spinner-track: rgba(99, 166, 184, 0.2);
+  --progress-track: #1b1710;
+  --progress-border: #383026;
+  --progress-a: #63a6b8;
+  --progress-b: #7ab3c4;
+  --log-bg: #0f0e09;
+  --log-border: #383026;
+  --log-text: #a59880;
+  --log-ok: #ccb57c;
+  --log-skip: #bca062;
+  --log-err: #a54c3e;
+
+  /* inline-styled fields + batch progress readouts */
+  --field-bg: #211d14;
+  --field-border: #383026;
+  --field-text: #e8e2ce;
+  --slate-text: #a59880;
+  --slate-dim: #7c7059;
+  --done-bg: #1f2716;
+  --done-border: #74a066;
+  --extract-bg: #41708a;
+
+  /* the FF1 brass, reserved for small accents */
+  --brass: #bca062;
+  --brass-bright: #d8c491;
+  --brass-deep: #8d7436;
+}
+
+/* Brass filigree: title, dialog headings and the theme control itself. */
+[data-theme="ff1x"] .logo h1 {
+  color: var(--brass-bright);
+}
+[data-theme="ff1x"] .modal-header h2 {
+  color: var(--brass-bright);
+}
+[data-theme="ff1x"] #btn-themes {
+  color: var(--brass-bright);
+  border-color: var(--brass-deep);
+}
+[data-theme="ff1x"] #btn-themes:hover {
+  border-color: var(--brass);
+}
+[data-theme="ff1x"] .btn-icon:hover {
+  color: var(--brass-bright);
+}
+[data-theme="ff1x"] .file-item.dir:hover {
+  color: var(--brass-bright);
+}
+
+[data-theme="ff1x"] .topbar {
+  box-shadow: 0 8px 22px -14px rgba(184, 154, 94, 0.5);
+}
+[data-theme="ff1x"] .viewport-controls {
+  box-shadow: 0 10px 26px -14px rgba(95, 158, 196, 0.4);
+}
+[data-theme="ff1x"] .layers-modal-content,
+[data-theme="ff1x"] .modal-content {
+  box-shadow: 0 0 0 1px rgba(184, 154, 94, 0.12), 0 18px 34px rgba(0, 0, 0, 0.62);
+}
+
+[data-theme="ff1x"] .file-filter,
+[data-theme="ff1x"] .stats-table {
+  background: var(--bg-sunken);
+}
+
+/* Native controls: colour only, widths untouched. */
+[data-theme="ff1x"] input[type="checkbox"],
+[data-theme="ff1x"] input[type="radio"],
+[data-theme="ff1x"] input[type="range"] {
+  accent-color: var(--accent-color);
+}
+[data-theme="ff1x"] .sidebar,
+[data-theme="ff1x"] .file-list,
+[data-theme="ff1x"] .layers-panel,
+[data-theme="ff1x"] .layers-modal-content,
+[data-theme="ff1x"] .texture-grid,
+[data-theme="ff1x"] .batch-log,
+[data-theme="ff1x"] .modal-body,
+[data-theme="ff1x"] #mesh-layers {
+  scrollbar-color: var(--border-light) var(--bg-primary);
+  scrollbar-width: auto;
+}
+
+/* ── FF1 Theme ───────────────────────────────────────────────────────────
+   Fatal Frame 1 in-game menu: near-black cold brown, antique brass
+   filigree and parchment text, with one muted blue as the only cool
+   note (the VIDA bar / PELL.GULA counter). Brass is the highlight --
+   title, active row, small labels, focus borders -- never body text
+   and never a large surface.
+   ---------------------------------------------------------------------- */
+[data-theme="ff1"] {
+  /* surfaces */
+  --bg-primary: #0a0807;             /* --bg-deep   */
+  --bg-secondary: #171210;          /* --bg-panel  */
+  --bg-tertiary: #221b16;           /* --bg-raised */
+  --bg-sunken: #100c0a;             /* inset wells */
+  --bg-hover: #2e231a;              /* brass-lit brown */
+
+  /* the one cool accent */
+  --accent-color: #5f9ec4;
+  --accent-hover: #74b0d2;
+  --accent-cyan: #74b0d2;
+  --accent-green: #6f9a60;           /* the △ Salir green */
+  --accent-red: #a04a40;             /* the PIEDRA gem red */
+  --on-accent: #08131a;
+
+  /* parchment text */
+  --text-primary: #e6dcc6;
+  --text-secondary: #a2907a;
+  --text-muted: #7a6a56;
+  --on-panel: #e6dcc6;
+
+  /* brass rules */
+  --border-color: #3a2e23;
+  --border-light: #5c4632;
+
+  /* scrims, glass, wells */
+  --view-bg: #0a0807;
+  --panel-glass: rgba(23, 18, 16, 0.9);
+  --scrim-soft: rgba(4, 3, 2, 0.55);
+  --scrim: rgba(4, 3, 2, 0.75);
+  --overlay-bg: rgba(10, 8, 7, 0.82);
+  --label-scrim: rgba(8, 6, 5, 0.8);
+  --texture-grid-bg: #100c0a;
+  --shadow-soft: rgba(0, 0, 0, 0.5);
+  --shadow-panel: rgba(0, 0, 0, 0.62);
+
+  /* status + category colours; "positive" reads as aged brass */
+  --danger-solid: #a04a40;
+  --danger-solid-hover: #7e3b34;
+  --ok-text: #c9b07a;
+  --ok-core: #b89a5e;
+  --ok-tint: rgba(184, 154, 94, 0.12);
+  --ok-tint-border: rgba(184, 154, 94, 0.3);
+  --warn-text: #b89a5e;              /* brass marks the highlighted item */
+  --root-text: #8a6f34;
+  --link-text: #74b0d2;
+
+  /* progress + batch log */
+  --spinner-track: rgba(95, 158, 196, 0.2);
+  --progress-track: #1c1510;
+  --progress-border: #3a2e23;
+  --progress-a: #5f9ec4;
+  --progress-b: #74b0d2;
+  --log-bg: #100c0a;
+  --log-border: #3a2e23;
+  --log-text: #a2907a;
+  --log-ok: #c9b07a;
+  --log-skip: #b89a5e;
+  --log-err: #a04a40;
+
+  /* inline-styled fields + batch progress readouts */
+  --field-bg: #221b16;
+  --field-border: #3a2e23;
+  --field-text: #e6dcc6;
+  --slate-text: #a2907a;
+  --slate-dim: #7a6a56;
+  --done-bg: #1e2416;
+  --done-border: #6f9a60;
+  --extract-bg: #3d6a85;
+
+  /* the FF1 brass, reserved for small accents */
+  --brass: #b89a5e;
+  --brass-bright: #d4bd8a;
+  --brass-deep: #8a6f34;
+}
+
+/* ── FF2 Theme (PS2) ──────────────────────────────────────────────────────
+   Fatal Frame 2, "Play Data" menu: a lantern-lit dark walnut ground with
+   the amber bloom of a flame behind the card, parchment-ivory lettering,
+   and the gold double rule that frames the panel and the help bar.
+   Amber is the identity -- it marks the selected row, focus and progress
+   -- but it stays a highlight and never carries body text; the parchment
+   ivory does that. The single cool note is the slate blue reserved for
+   links, so a URL never reads as part of the ornament.
+   ---------------------------------------------------------------------- */
+[data-theme="ff2"] {
+  /* surfaces: dark walnut, warm at every level */
+  --bg-primary: #150d06;             /* deep walnut-black */
+  --bg-secondary: #1f1409;          /* panel */
+  --bg-tertiary: #2b1c0d;           /* raised cards */
+  --bg-sunken: #191007;             /* inset wells */
+  --bg-hover: #4a2e10;              /* amber-lit brown */
+
+  /* lantern amber: the selected row, focus and progress */
+  --accent-color: #d98b2b;
+  --accent-hover: #f0a94a;
+  --accent-cyan: #e0b458;           /* the bright gold of the frame */
+  --accent-green: #6f8a4a;
+  --accent-red: #a8412a;            /* rust, the one warning red */
+  --on-accent: #1a0e04;             /* dark ink reads on amber fill */
+
+  /* parchment ivory lettering */
+  --text-primary: #f0e4c8;
+  --text-secondary: #bda478;
+  --text-muted: #8d7550;
+  --on-panel: #f0e4c8;
+
+  /* the gold double rule */
+  --border-color: #6b4a22;
+  --border-light: #9a7030;
+
+  /* scrims, glass, wells */
+  --view-bg: #120a04;
+  --panel-glass: rgba(31, 20, 9, 0.9);
+  --scrim-soft: rgba(10, 6, 3, 0.55);
+  --scrim: rgba(10, 6, 3, 0.75);
+  --overlay-bg: rgba(21, 13, 6, 0.82);
+  --label-scrim: rgba(16, 10, 5, 0.8);
+  --texture-grid-bg: #191007;
+  --shadow-soft: rgba(0, 0, 0, 0.5);
+  --shadow-panel: rgba(0, 0, 0, 0.62);
+
+  /* status + category colours; "positive" reads as candle gold, not green */
+  --danger-solid: #a8412a;
+  --danger-solid-hover: #86331f;
+  --ok-text: #e0c07a;
+  --ok-core: #c9a227;
+  --ok-tint: rgba(201, 162, 39, 0.12);
+  --ok-tint-border: rgba(201, 162, 39, 0.3);
+  --warn-text: #f0a94a;              /* amber marks the selected entry */
+  --root-text: #9a7030;
+  --link-text: #7fa8c0;              /* the one cool note */
+
+  /* progress + batch log */
+  --spinner-track: rgba(217, 139, 43, 0.2);
+  --progress-track: #241608;
+  --progress-border: #6b4a22;
+  --progress-a: #d98b2b;
+  --progress-b: #e0b458;
+  --log-bg: #191007;
+  --log-border: #6b4a22;
+  --log-text: #bda478;
+  --log-ok: #e0c07a;
+  --log-skip: #c9a227;
+  --log-err: #a8412a;
+
+  /* inline-styled fields + batch progress readouts */
+  --field-bg: #2b1c0d;
+  --field-border: #6b4a22;
+  --field-text: #f0e4c8;
+  --slate-text: #bda478;
+  --slate-dim: #8d7550;
+  --done-bg: #22301a;
+  --done-border: #6f8a4a;
+  --extract-bg: #b5651a;
+
+  /* the FF2 lantern amber, reserved for small accents */
+  --amber: #c9861f;
+  --amber-bright: #f0b45c;
+  --amber-deep: #8f5a18;
+}
+
+/* Gold rule: title, dialog headings and the theme control itself. */
+[data-theme="ff2"] .logo h1 {
+  color: var(--amber-bright);
+}
+[data-theme="ff2"] .modal-header h2 {
+  color: var(--amber-bright);
+}
+[data-theme="ff2"] #btn-themes {
+  color: var(--amber-bright);
+  border-color: var(--amber-deep);
+}
+[data-theme="ff2"] #btn-themes:hover {
+  border-color: var(--amber);
+}
+[data-theme="ff2"] .btn-icon:hover {
+  color: var(--amber-bright);
+}
+[data-theme="ff2"] .file-item.dir:hover {
+  color: var(--amber-bright);
+}
+
+/* The lantern bloom behind the frame, and the ember rim on the floating
+   controls. Shadows only, so nothing reflows. */
+[data-theme="ff2"] .topbar {
+  box-shadow: 0 8px 22px -14px rgba(217, 139, 43, 0.5);
+}
+[data-theme="ff2"] .viewport-controls {
+  box-shadow: 0 10px 26px -14px rgba(224, 180, 88, 0.42);
+}
+/* The gold double rule around a dialog, as on the Play Data card. */
+[data-theme="ff2"] .layers-modal-content,
+[data-theme="ff2"] .modal-content {
+  box-shadow: 0 0 0 1px rgba(224, 180, 88, 0.18), 0 18px 34px rgba(0, 0, 0, 0.62);
+}
+
+[data-theme="ff2"] .file-filter,
+[data-theme="ff2"] .stats-table {
+  background: var(--bg-sunken);
+}
+
+/* Native controls: colour only, widths untouched. */
+[data-theme="ff2"] input[type="checkbox"],
+[data-theme="ff2"] input[type="radio"],
+[data-theme="ff2"] input[type="range"] {
+  accent-color: var(--accent-color);
+}
+[data-theme="ff2"] .sidebar,
+[data-theme="ff2"] .file-list,
+[data-theme="ff2"] .layers-panel,
+[data-theme="ff2"] .layers-modal-content,
+[data-theme="ff2"] .texture-grid,
+[data-theme="ff2"] .batch-log,
+[data-theme="ff2"] .modal-body,
+[data-theme="ff2"] #mesh-layers {
+  scrollbar-color: var(--border-light) var(--bg-primary);
+  scrollbar-width: auto;
+}
+
+/* ── FF2 Wii Theme ─────────────────────────────────────────────────────────
+   Fatal Frame 2 Wii: Deep Crimson Butterfly map menu. A blood-crimson
+   ground over near-black, the ember flame of the highlighted entry, gold
+   filigree ornament, and cream text. Crimson is the identity so it stays
+   on the surfaces; the ember/gold are highlights and never carry body text.
+   The two cool notes are the blue and green gauges at the right edge.
+
+   This is the Wii palette and belongs to no other release: the PS2 build
+   has its own, the amber-and-parchment "Play Data" menu below.
+   ---------------------------------------------------------------------- */
+[data-theme="ff2w"] {
+  /* surfaces: crimson-black */
+  --bg-primary: #150708;             /* deep crimson-black */
+  --bg-secondary: #23090a;          /* panel */
+  --bg-tertiary: #301011;           /* raised cards */
+  --bg-sunken: #1c0608;             /* inset wells */
+  --bg-hover: #4a1410;              /* ember-lit crimson */
+
+  /* ember accent: the flame on the selected entry */
+  --accent-color: #c8341c;
+  --accent-hover: #e0563a;
+  --accent-cyan: #e08a3c;           /* the flame's orange tip */
+  --accent-green: #4f8f4a;          /* the green gauge */
+  --accent-red: #a02a1c;            /* the crimson ground, darkened */
+  --on-accent: #1a0506;             /* dark ink on ember fill */
+
+  /* cream text */
+  --text-primary: #f0e6d2;
+  --text-secondary: #b0968c;
+  --text-muted: #866b66;
+  --on-panel: #f0e6d2;
+
+  /* gold filigree rules */
+  --border-color: #4a3320;
+  --border-light: #6e4d2c;
+
+  /* scrims, glass, wells */
+  --view-bg: #150708;
+  --panel-glass: rgba(35, 9, 10, 0.9);
+  --scrim-soft: rgba(8, 2, 3, 0.55);
+  --scrim: rgba(8, 2, 3, 0.75);
+  --overlay-bg: rgba(21, 7, 8, 0.82);
+  --label-scrim: rgba(14, 4, 5, 0.8);
+  --texture-grid-bg: #1c0608;
+  --shadow-soft: rgba(0, 0, 0, 0.5);
+  --shadow-panel: rgba(0, 0, 0, 0.62);
+
+  /* status + category colours; "positive" reads as ember, not neon green */
+  --danger-solid: #a02a1c;
+  --danger-solid-hover: #7d2015;
+  --ok-text: #d9a05a;
+  --ok-core: #b08d3a;
+  --ok-tint: rgba(176, 141, 58, 0.12);
+  --ok-tint-border: rgba(176, 141, 58, 0.3);
+  --warn-text: #e0563a;              /* ember marks the highlighted entry */
+  --root-text: #8a6a2e;
+  --link-text: #4a6fc0;              /* the blue gauge */
+
+  /* progress + batch log */
+  --spinner-track: rgba(200, 52, 28, 0.2);
+  --progress-track: #26090b;
+  --progress-border: #4a3320;
+  --progress-a: #c8341c;
+  --progress-b: #e0563a;
+  --log-bg: #1c0608;
+  --log-border: #4a3320;
+  --log-text: #b0968c;
+  --log-ok: #d9a05a;
+  --log-skip: #b08d3a;
+  --log-err: #a02a1c;
+
+  /* inline-styled fields + batch progress readouts */
+  --field-bg: #301011;
+  --field-border: #4a3320;
+  --field-text: #f0e6d2;
+  --slate-text: #b0968c;
+  --slate-dim: #866b66;
+  --done-bg: #14240f;
+  --done-border: #4f8f4a;
+  --extract-bg: #8a4a1e;
+
+  /* FF2 gold filigree, reserved for small accents */
+  --brass: #b08d3a;
+  --brass-bright: #d4b268;
+  --brass-deep: #7d5f26;
+}
+
+/* Gold filigree: title, dialog headings and the theme control itself. */
+[data-theme="ff2w"] .logo h1 {
+  color: var(--brass-bright);
+}
+[data-theme="ff2w"] .modal-header h2 {
+  color: var(--brass-bright);
+}
+[data-theme="ff2w"] #btn-themes {
+  color: var(--brass-bright);
+  border-color: var(--brass-deep);
+}
+[data-theme="ff2w"] #btn-themes:hover {
+  border-color: var(--brass);
+}
+[data-theme="ff2w"] .btn-icon:hover {
+  color: var(--brass-bright);
+}
+[data-theme="ff2w"] .file-item.dir:hover {
+  color: var(--brass-bright);
+}
+
+/* Crimson bloom on the frame, an ember rim on the floating controls.
+   Shadows only, so nothing reflows. */
+[data-theme="ff2w"] .topbar {
+  box-shadow: 0 8px 22px -14px rgba(200, 52, 28, 0.45);
+}
+[data-theme="ff2w"] .viewport-controls {
+  box-shadow: 0 10px 26px -14px rgba(224, 138, 60, 0.4);
+}
+[data-theme="ff2w"] .layers-modal-content,
+[data-theme="ff2w"] .modal-content {
+  box-shadow: 0 0 0 1px rgba(176, 141, 58, 0.16), 0 18px 34px rgba(0, 0, 0, 0.62);
+}
+
+[data-theme="ff2w"] .file-filter,
+[data-theme="ff2w"] .stats-table {
+  background: var(--bg-sunken);
+}
+
+/* Native controls: colour only, widths untouched. */
+[data-theme="ff2w"] input[type="checkbox"],
+[data-theme="ff2w"] input[type="radio"],
+[data-theme="ff2w"] input[type="range"] {
+  accent-color: var(--accent-color);
+}
+[data-theme="ff2w"] .sidebar,
+[data-theme="ff2w"] .file-list,
+[data-theme="ff2w"] .layers-panel,
+[data-theme="ff2w"] .layers-modal-content,
+[data-theme="ff2w"] .texture-grid,
+[data-theme="ff2w"] .batch-log,
+[data-theme="ff2w"] .modal-body,
+[data-theme="ff2w"] #mesh-layers {
+  scrollbar-color: var(--border-light) var(--bg-primary);
+  scrollbar-width: auto;
+}
+
+/* Brass filigree: title, dialog headings and the theme control itself. */
+[data-theme="ff1"] .logo h1 {
+  color: var(--brass-bright);
+}
+[data-theme="ff1"] .modal-header h2 {
+  color: var(--brass-bright);
+}
+[data-theme="ff1"] #btn-themes {
+  color: var(--brass-bright);
+  border-color: var(--brass-deep);
+}
+[data-theme="ff1"] #btn-themes:hover {
+  border-color: var(--brass);
+}
+[data-theme="ff1"] .btn-icon:hover {
+  color: var(--brass-bright);
+}
+[data-theme="ff1"] .file-item.dir:hover {
+  color: var(--brass-bright);
+}
+
+/* Brass glow on the frame, a cool rim on the floating controls.
+   Shadows only, so nothing reflows. */
+[data-theme="ff1"] .topbar {
+  box-shadow: 0 8px 22px -14px rgba(184, 154, 94, 0.5);
+}
+[data-theme="ff1"] .viewport-controls {
+  box-shadow: 0 10px 26px -14px rgba(95, 158, 196, 0.45);
+}
+[data-theme="ff1"] .layers-modal-content,
+[data-theme="ff1"] .modal-content {
+  box-shadow: 0 0 0 1px rgba(184, 154, 94, 0.14), 0 18px 34px rgba(0, 0, 0, 0.62);
+}
+
+/* Sunken wells: these already sit on a background in the base sheet, so
+   the darker FF1 ground just gets a touch of warmth under the panels. */
+[data-theme="ff1"] .file-filter,
+[data-theme="ff1"] .stats-table {
+  background: var(--bg-sunken);
+}
+
+/* Native controls: colour only, widths untouched. */
+[data-theme="ff1"] input[type="checkbox"],
+[data-theme="ff1"] input[type="radio"],
+[data-theme="ff1"] input[type="range"] {
+  accent-color: var(--accent-color);
+}
+[data-theme="ff1"] .sidebar,
+[data-theme="ff1"] .file-list,
+[data-theme="ff1"] .layers-panel,
+[data-theme="ff1"] .layers-modal-content,
+[data-theme="ff1"] .texture-grid,
+[data-theme="ff1"] .batch-log,
+[data-theme="ff1"] .modal-body,
+[data-theme="ff1"] #mesh-layers {
+  scrollbar-color: var(--border-light) var(--bg-primary);
+  scrollbar-width: auto;
 }

@@ -4,8 +4,33 @@
   <meta charset="UTF-8">
   <link rel="icon" type="image/png" href="app-icon.png">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Project Zero 3 - 3D Viewer & Extractor</title>
-  <link rel="stylesheet" href="style.css">
+  <title>Project Zero / Fatal Frame - 3D Viewer & Extractor</title>
+  <link rel="stylesheet" href="style.css?v=themes-4">
+  <script>
+    /* Restore the saved theme before first paint so there is no flash of the
+       wrong palette. Mirrors PZ_THEME_KEY / PZ_DEFAULT_THEME / PZ_THEMES in
+       app.js. With nothing stored the viewer starts on 'dynamic', so the very
+       first paint is already the palette of the game being browsed. */
+    (function () {
+      try {
+        var theme = localStorage.getItem('pzviewer.theme') || 'dynamic';
+        /* 'dynamic' is resolved here too, from the last browsed game, so a
+           reload does not flash the default palette before app.js catches up.
+           Mirrors effectiveTheme() / PZ_DYNAMIC_KEY in app.js. */
+        if (theme === 'dynamic') {
+          var game = localStorage.getItem('pzviewer.dynamicGame');
+          /* FF2's two releases have their own palettes; mirrors PZ_GAME_THEME */
+          theme = { ff1: 'ff1', ff2: 'ff2', ff2w: 'ff2w', ff3: 'ff3' }[game] || 'ff3';
+        }
+        if (theme === 'ff3' || theme === 'ff2' || theme === 'ff2w' ||
+            theme === 'ff1' || theme === 'default') {
+          document.documentElement.setAttribute('data-theme', theme);
+        }
+      } catch (err) {
+        /* storage blocked or unavailable - no data-theme, :root defaults apply */
+      }
+    })();
+  </script>
   <style>
     /* Fix: modal footer always visible — overrides cached CSS */
     .modal-content {
@@ -29,17 +54,18 @@
         <div class="logo">
           <img class="icon app-logo" src="app-icon.png" alt="PZViewer">
           <h1>Project Zero / Fatal Frame 3D Viewer</h1>
-          <span class="badge">MikuPan Engine</span>
-        </div>
-        <div class="topbar-divider"></div>
-        <div id="gpu-badge" class="gpu-badge" title="Hardware GPU Rendering Active">
-          <span class="gpu-dot"></span>
-          <span id="gpu-name">GPU: Detecting...</span>
         </div>
       </div>
       <div class="top-actions">
-        <button id="btn-export-collision" class="btn btn-secondary" title="Export 3D Collision Geometry (.glb / .obj)">
-          🛡️ Export Collision...
+        <button id="btn-credits" class="btn btn-secondary" title="Who made this, and what it is built on">Credits</button>
+        <button id="btn-howto" class="btn btn-secondary" title="How to drive the viewer">How to use...</button>
+        <div class="theme-picker">
+          <button id="btn-themes" class="btn btn-secondary" title="Change the viewer colour theme"
+                  aria-haspopup="menu" aria-expanded="false">🎨 Themes ▾</button>
+          <div id="themes-menu" class="themes-menu hidden" role="menu"></div>
+        </div>
+        <button id="btn-batch-modal" class="btn btn-secondary" title="Batch convert a folder of models to GLB / OBJ / FBX">
+          ⚡ Batch Convert...
         </button>
         <button id="btn-export-modal" class="btn btn-primary" title="Export Model to glTF, OBJ, DAE, FBX">
           💾 Export 3D Model...
@@ -55,16 +81,23 @@
           <div class="section-header">
             <h3>🗂️ Asset Browser</h3>
             <div style="display: flex; gap: 4px;">
-              <button id="btn-dir-up" class="btn btn-sm" title="Go up to parent directory">⬆ Up</button>
-              <button id="btn-browse-refresh" class="btn-icon" title="Refresh">🔄</button>
+              <button id="btn-browse-refresh" class="btn btn-sm" title="Re-read the current folder">Reload</button>
             </div>
           </div>
+          <!-- The three PS2 releases are one group; the Wii port has a tab of
+               its own. Built in JS so the groups live beside PZ_GAMES. -->
+          <div id="root-tabs" class="root-tabs" role="tablist" aria-label="Asset Browser game group"></div>
           <div class="dir-nav">
             <input type="text" id="input-dir" value="" placeholder="Choose a folder or enter a path...">
             <button id="btn-dir-go" class="btn btn-sm">Go</button>
           </div>
           <input type="search" id="file-filter" class="file-filter" placeholder="Filter files and folders...">
           <div id="browser-location" class="browser-location"></div>
+          <!-- Saved roots live in their own container. They used to share
+               #file-list with the directory listing, which meant redrawing the
+               roots -- on a tab switch, or on clearing a path -- wiped the
+               folders of whatever directory was open. -->
+          <div id="saved-roots"></div>
           <div id="file-list" class="file-list">
             <div class="loading-hint">Choose a folder to browse assets.</div>
           </div>
@@ -81,12 +114,12 @@
             <div class="stat-row"><span class="label">Submeshes:</span><span id="stat-submeshes" class="val">0</span></div>
             <div class="stat-row"><span class="label">Bones:</span><span id="stat-bones" class="val">0</span></div>
             <div class="stat-row"><span class="label">Textures:</span><span id="stat-textures" class="val">0</span></div>
-            <div class="stat-row"><span class="label">GPU Pipeline:</span><span class="val" style="color: #10b981;">Direct3D / VBO</span></div>
+            <div class="stat-row"><span class="label">GPU Pipeline:</span><span class="val" style="color: var(--ok-core);">Direct3D / VBO</span></div>
           </div>
           <div id="texture-preview-box" class="texture-preview-box">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
               <div class="texture-preview-title" style="margin: 0;">Texture VRAM Slots</div>
-              <button id="btn-extract-textures" class="btn btn-sm" style="padding: 2px 7px; font-size: 11px; background: #0284c7; color: white;" title="Extract all model textures as PNG (.zip)">📥 Extract PNGs</button>
+              <button id="btn-extract-textures" class="btn btn-sm" style="padding: 2px 7px; font-size: 11px; background: var(--extract-bg); color: white;" title="Extract all model textures as PNG (.zip)">📥 Extract PNGs</button>
             </div>
             <div id="texture-grid" class="texture-grid"></div>
           </div>
@@ -97,71 +130,45 @@
       <main class="viewport-container">
         <div id="viewport"></div>
 
-        <!-- Floating Viewport Controls -->
+        <!-- Floating Viewport Controls. The shading looks are two toggles rather than a
+             picker: each button cycles between the two appearances it owns, and
+             whichever was pressed last is the one in force. -->
         <div class="viewport-controls">
           <div class="control-group">
-            <label>Shading:</label>
-            <select id="select-shading">
-              <option value="textured" selected>Textures</option>
-              <option value="textured_vertex">Textures + Vertex Color</option>
-              <option value="vcolors">Vertex Colors (Rooms)</option>
-              <option value="wireframe">Wireframe</option>
-              <option value="solid">Solid White</option>
-            </select>
+            <button id="btn-shade-textures" class="btn btn-sm" title="Textured, or Solid White (T)">Textures (T)</button>
+            <button id="btn-shade-wireframe" class="btn btn-sm" title="Wireframe over the textures, or wireframe alone (W)">Wireframe (W)</button>
+            <button id="btn-vcolors" class="btn btn-sm" title="Vertex Colors (V)">Vertex Colors (V)</button>
           </div>
           <div class="control-group">
-            <label><input type="checkbox" id="chk-bones"> Bones</label>
+            <button id="btn-bones" class="btn btn-sm" title="Show or hide the skeleton (B)">Bones (B)</button>
           </div>
-          <div class="control-group">
-            <label><input type="checkbox" id="chk-collision"> Collision</label>
-          </div>
-          <button id="btn-mesh-layers" class="btn btn-sm">Layers</button>
-          <button id="btn-reset-cam" class="btn btn-sm" title="Center view">🎯 Reset Cam (F)</button>
+          <button id="btn-mesh-layers" class="btn btn-sm" title="Show or hide the material layers (L)">Layers (L)</button>
+          <button id="btn-reset-cam" class="btn btn-sm" title="Center view (F)">Reset Cam (F)</button>
         </div>
+
+        <!-- Xbox recolour switch. Lives in the opposite corner from the viewport
+             control bar, and stays hidden unless the asset that actually has
+             recolour archives is the one on screen. -->
+        <button id="btn-xpr-variant" class="xpr-variant-btn hidden"
+                title="Cycle the Xbox recolour archives that share this geometry. Left and right arrow keys work too.">
+          <span class="xpr-variant-label">Recolor</span>
+          <span id="xpr-variant-name">XPR</span>
+        </button>
 
         <div id="layers-modal" class="layers-modal hidden">
           <div class="layers-modal-content">
             <div class="layers-modal-header">
-              <b>Mesh Layers</b>
-              <button id="btn-close-layers" class="btn-icon">✖</button>
+              <b>Material Layers</b>
+              <div style="display:flex;gap:4px;align-items:center;">
+                <button id="btn-layers-minimize" class="btn-icon" title="Minimise the layers panel">▾</button>
+                <button id="btn-close-layers" class="btn-icon">✖</button>
+              </div>
             </div>
             <div class="layers-actions">
               <button id="btn-layers-all" class="btn btn-sm">Activate all</button>
               <button id="btn-layers-none" class="btn btn-sm">Deactivate all</button>
             </div>
-            <div id="mesh-layers"><span class="muted">Load an asset to view its meshes.</span></div>
-          </div>
-        </div>
-
-        <!-- Animation Timeline Panel -->
-        <div id="anim-panel" class="anim-panel hidden">
-          <div class="anim-top-row">
-            <div class="anim-mode-toggles">
-              <button id="btn-t-pose" class="btn btn-toggle active">🧍 T-Pose (Rest Pose)</button>
-              <button id="btn-animated" class="btn btn-toggle">🎬 Animated</button>
-            </div>
-            <div class="clip-selector">
-              <label>Clip:</label>
-              <select id="select-clip"></select>
-            </div>
-            <div class="anim-extra-actions">
-              <button id="btn-load-animation" class="btn btn-sm">Load BMD animation...</button>
-              <button id="btn-detach-animation" class="btn btn-sm btn-danger" title="Detach animation to see pure T-Pose">Detach</button>
-            </div>
-          </div>
-          <div class="anim-control-row">
-            <button id="btn-play-pause" class="btn btn-icon-lg">▶️</button>
-            <input type="range" id="timeline-slider" min="0" max="100" value="0" step="1">
-            <span id="frame-counter" class="frame-label">Frame: 0 / 0</span>
-            <div class="speed-control">
-              <label>Speed:</label>
-              <select id="select-speed">
-                <option value="0.25">0.25x</option>
-                <option value="0.5">0.5x</option>
-                <option value="1.0" selected>1.0x</option>
-                <option value="2.0">2.0x</option>
-              </select>
-            </div>
+            <div id="mesh-layers"><span class="muted">Load an asset to view its materials.</span></div>
           </div>
         </div>
       </main>
@@ -176,11 +183,14 @@
           <button id="btn-modal-close" class="btn-icon">✖</button>
         </div>
         <div class="modal-body">
-          <div class="form-group">
+          <!-- "What to Export" is hidden, not deleted: collision export is
+               unusable for now, so there is only one thing to export and
+               offering the choice would be noise. The markup is kept for when
+               it is worth having, and updateExportTargetUI() still runs. -->
+          <div id="export-target-group" class="form-group hidden">
             <label>What to Export:</label>
             <div class="radio-grid" style="grid-template-columns: 1fr 1fr; margin-bottom: 12px;">
               <label><input type="radio" name="export-target" value="model" checked> <b>🎨 3D Model & Textures</b></label>
-              <label><input type="radio" name="export-target" value="collision"> <b>🛡️ 3D Collision Geometry</b></label>
             </div>
           </div>
           <div class="form-group">
@@ -189,19 +199,10 @@
               <label id="lbl-fmt-dae"><input type="radio" name="export-fmt" value="dae"> <b>COLLADA (.dae)</b> <span class="fmt-hint">(Skins & rigs)</span></label>
               <label id="lbl-fmt-fbx"><input type="radio" name="export-fmt" value="fbx"> <b>Autodesk FBX (.fbx)</b> <span class="fmt-hint">(Maya / Max / Unity)</span></label>
             </div>
-          <div id="model-options-box" class="form-group options-box">
-            <h4>Model Options:</h4>
-            <label id="lbl-exp-vcolors"><input type="checkbox" id="exp-vcolors" checked> <b>Preserve Vertex Colors</b> <span class="opt-desc">(Rooms only)</span></label>
-            <label><input type="checkbox" id="exp-tpose" checked> <b>Export in T-Pose</b> <span class="opt-desc">(Export clean character bind pose)</span></label>
-            <label><input type="checkbox" id="exp-textures" checked> <b>Include & Extract Textures (PNG)</b> <span class="opt-desc">(Saved to exports/[name]_textures/)</span></label>
-          </div>
-          <div id="collision-options-box" class="form-group options-box hidden">
-            <h4>Collision Options:</h4>
-            <p class="opt-desc" style="margin-bottom: 8px;">
-              Converts 2D boundary half-planes into <b>3D volumetric collision solids</b> (floor, ceiling, and perimeter walls) with calculated outward normals and vertex colors.
-            </p>
-            <label><input type="checkbox" id="exp-col-vcolors" checked> <b>Include Collision Vertex Colors</b></label>
-          </div>
+          <!-- Empty and hidden: vertex colours and texture extraction are now always
+               on, and T-pose always off, so there is no option left to offer.
+               Kept so the box can be brought back without rebuilding it. -->
+          <div id="model-options-box" class="form-group options-box hidden"></div>
           <div class="form-group">
             <label>Save to Destination:</label>
             <div class="export-destination-row">
@@ -218,6 +219,241 @@
       </div>
     </div>
 
+    <!-- Texture preview: one decoded texture at full size, over a backdrop that
+     dims the rest of the tool. Clicking the backdrop, the ✖ or Escape closes
+     it and the tool returns to its normal brightness. -->
+    <div id="texture-preview" class="hidden">
+      <div class="preview-backdrop" id="texture-preview-backdrop"></div>
+      <div class="preview-content" role="dialog" aria-modal="true" aria-labelledby="texture-preview-title">
+        <div class="preview-header">
+          <span class="preview-title" id="texture-preview-title">Texture</span>
+          <span class="preview-meta" id="texture-preview-meta"></span>
+          <button id="btn-texture-preview-close" class="btn-icon" title="Close preview (Esc)">✖</button>
+        </div>
+        <div class="preview-image-wrap">
+          <img class="preview-image" id="texture-preview-image" alt="" />
+        </div>
+      </div>
+    </div>
+
+<!-- Credits: who the idea came from, who worked on it, what it was built
+     against, and who built it. -->
+    <div id="credits-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content" style="max-width:560px;">
+        <div class="modal-header">
+          <h2>Credits</h2>
+          <button id="btn-credits-close" class="btn-icon">✖</button>
+        </div>
+        <div class="modal-body info-body watermark-host">
+          <!-- The viewer's own icon, large and faint, behind the text. Decorative,
+               so it is not announced and cannot be clicked through to. -->
+          <img class="watermark" src="app-icon.png" alt="" aria-hidden="true">
+          <section>
+            <h4>Original idea</h4>
+            <p class="info-row"><b>DaniKH</b></p>
+          </section>
+          <section>
+            <h4>Collaborators</h4>
+            <p class="info-row">
+              <a href="https://x.com/Yokimitsuro" target="_blank" rel="noopener noreferrer">Yokimitsuro</a>
+            </p>
+            <p class="info-row"><b>Scream*Alyx*Psalm</b></p>
+          </section>
+          <section>
+            <h4>Reference documentation</h4>
+            <p class="info-row">
+              <a href="https://github.com/Mikompilation/Obscura" target="_blank" rel="noopener noreferrer">Obscura</a>
+            </p>
+            <p class="info-row">
+              <a href="https://github.com/Mikompilation/MikuPan" target="_blank" rel="noopener noreferrer">Mikupan</a>
+            </p>
+            <p class="info-row">
+              <a href="https://github.com/Mikompilation/Mikompilation" target="_blank" rel="noopener noreferrer">Mikompilation</a>
+            </p>
+          </section>
+          <section>
+            <h4>Assembler and builder of the tool</h4>
+            <p class="info-row"><b>Claude</b></p>
+          </section>
+          <p class="opt-desc" style="margin-top:14px;">
+            Fatal Frame / Project Zero assets belong to their respective publishers.
+            This viewer reads the files you already own; it ships no game data.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-credits-done" class="btn btn-primary">Close</button>
+        </div>
+      </div>
+    </div>
+
+<!-- How to use. Kept in step with the actual toolbar: every button listed here
+     exists, and nothing that was removed from the UI is still described. -->
+    <div id="howto-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content" style="max-width:640px;">
+        <div class="modal-header">
+          <h2>How to use...</h2>
+          <button id="btn-howto-close" class="btn-icon">✖</button>
+        </div>
+        <div class="modal-body info-body">
+          <section>
+            <h4>1. Point it at your games</h4>
+            <p>
+              The Asset Browser lists one row per release.
+              <b>Original</b> holds the three PS2 games (FF1, FF2, FF3);
+              <b>Extra</b> holds the two ports (FF1 XBOX, FF2 Wii).
+              Press <b>Select</b> on a row to choose its folder once, then the
+              row remembers it. <b>Update</b> points it somewhere else and
+              <b>✖</b> forgets it.
+            </p>
+          </section>
+          <section>
+            <h4>2. Browse and load</h4>
+            <p>
+              Click a row to open that folder; click a model to load it.
+              The box above the list filters what is shown.
+              <b>Reload</b> re-reads the current folder. In an empty folder the
+              tree offers <b>... (Parent Folder)</b>.
+            </p>
+          </section>
+          <section>
+            <h4>3. Look at it — the viewport bar, and the keys</h4>
+            <table class="info-keys">
+              <tr><td><b>Textures</b> (T)</td><td>textured ⇄ solid white</td></tr>
+              <tr><td><b>Wireframe</b> (W)</td><td>textured → wireframe over the model → wireframe alone</td></tr>
+              <tr><td><b>Vertex Colors</b> (V)</td><td>texture with the baked vertex colours, or on its own</td></tr>
+              <tr><td><b>Bones</b> (B)</td><td>skeleton on or off, drawn over the model</td></tr>
+              <tr><td><b>Layers</b> (L)</td><td>the material list</td></tr>
+              <tr><td><b>Reset Cam</b> (F)</td><td>frame the model again</td></tr>
+              <tr><td><b>← →</b></td><td>previous / next recolour, on the assets that have several</td></tr>
+            </table>
+            <p>Drag to orbit, wheel to zoom.</p>
+          </section>
+          <section>
+            <h4>4. Materials</h4>
+            <p>
+              The Layers panel lists one row per <b>material</b>, not per strip of
+              geometry — a face, a sleeve, a piece of set dressing — and shows how
+              many submeshes each one draws. Untick a row to hide it.
+              Drag the panel by its title bar to move it, <b>▾</b> to shrink it to
+              the title while you keep working in the viewport.
+            </p>
+          </section>
+          <section>
+            <h4>5. Textures</h4>
+            <p>
+              The VRAM slots are square, one per decoded page. Click one to open it
+              large; close it with <b>✖</b>, <b>Escape</b>, or a click outside.
+              <b>Extract PNGs</b> writes every page of the loaded model to a zip.
+            </p>
+          </section>
+          <section>
+            <h4>6. Get it out</h4>
+            <p>
+              <b>Export 3D Model</b> writes glTF, OBJ, COLLADA or FBX.
+              Vertex colours are always preserved and the textures are always
+              extracted as PNG next to the file.
+              <b>Batch Convert</b> does a whole folder at once: pick the format,
+              leave it recursive to keep the subfolder structure, and say whether
+              an existing file is skipped or overwritten.
+            </p>
+          </section>
+          <section>
+            <h4>7. Colours</h4>
+            <p>
+              <b>Themes</b> picks a palette, or <b>Dynamic</b> to follow whichever
+              game folder you are browsing. The icon at the top left is the camera
+              of the game on screen.
+            </p>
+          </section>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-howto-done" class="btn btn-primary">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Batch Convert Modal -->
+    <div id="batch-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content" style="max-width:600px;">
+        <div class="modal-header">
+          <h2>⚡ Batch Convert</h2>
+          <button id="btn-batch-close" class="btn-icon">✖</button>
+        </div>
+        <div class="modal-body" id="batch-modal-body">
+          <!-- Setup form -->
+          <div id="batch-setup-form">
+            <div class="form-group">
+              <label><b>Source Folder</b></label>
+              <div class="export-destination-row">
+                <input type="text" id="batch-source-dir" placeholder="Path to folder containing models..." style="flex:1;padding:6px 8px;background:var(--field-bg);border:1px solid var(--field-border);border-radius:4px;color:var(--field-text);font-size:13px;">
+                <button id="btn-batch-pick-source" class="btn btn-secondary">Browse...</button>
+              </div>
+              <div style="margin-top:4px;">
+                <button id="btn-batch-use-current" class="btn btn-sm" style="font-size:11px;">Use Current Browser Folder</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label><b>Output Folder</b></label>
+              <div class="export-destination-row">
+                <input type="text" id="batch-output-dir" placeholder="Default: PZViewer/exports/batch/" style="flex:1;padding:6px 8px;background:var(--field-bg);border:1px solid var(--field-border);border-radius:4px;color:var(--field-text);font-size:13px;">
+                <button id="btn-batch-pick-output" class="btn btn-secondary">Browse...</button>
+              </div>
+            </div>
+            <div class="form-group">
+              <label><b>Export Format</b></label>
+              <div class="radio-grid" style="grid-template-columns:1fr 1fr 1fr 1fr;margin-top:6px;">
+                <label><input type="radio" name="batch-fmt" value="glb" checked> <b>GLB</b></label>
+                <label><input type="radio" name="batch-fmt" value="obj"> <b>OBJ</b></label>
+                <label><input type="radio" name="batch-fmt" value="dae"> <b>DAE</b></label>
+                <label><input type="radio" name="batch-fmt" value="fbx"> <b>FBX</b></label>
+              </div>
+            </div>
+            <div class="form-group options-box">
+              <h4>Options</h4>
+              <label><input type="checkbox" id="batch-recursive" checked> <b>Recursive</b> <span class="opt-desc">(scan subfolders)</span></label>
+              <label><input type="checkbox" id="batch-textures" checked> <b>Include Textures (PNG)</b></label>
+              <label><input type="checkbox" id="batch-colors" checked> <b>Preserve Vertex Colors</b></label>
+              <label><input type="checkbox" id="batch-mirror" checked> <b>Mirror folder structure</b> <span class="opt-desc">(preserve hierarchy in output)</span></label>
+              <label style="margin-top:6px;"><b>If file exists:</b>
+                <select id="batch-conflict" style="margin-left:8px;background:var(--field-bg);border:1px solid var(--field-border);border-radius:4px;color:var(--field-text);padding:2px 6px;">
+                  <option value="skip">Skip (default)</option>
+                  <option value="overwrite">Overwrite</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <!-- Progress view (shown after start) -->
+          <div id="batch-progress-view" class="hidden">
+            <div style="margin-bottom:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <span id="batch-progress-label" style="font-size:13px;color:var(--slate-text);">Starting...</span>
+                <span id="batch-progress-count" style="font-size:13px;color:var(--slate-dim);"></span>
+              </div>
+              <div class="batch-progress-bar-track">
+                <div id="batch-progress-bar" class="batch-progress-bar-fill" style="width:0%"></div>
+              </div>
+            </div>
+            <div id="batch-log" class="batch-log"></div>
+            <div id="batch-done-msg" class="hidden" style="margin-top:10px;padding:10px;background:var(--done-bg);border:1px solid var(--done-border);border-radius:6px;font-size:13px;">
+              <b>✅ Batch complete!</b>
+              <span id="batch-done-detail"></span><br>
+              <a id="batch-output-link" href="#" style="color:var(--link-text);font-size:12px;text-decoration:underline;" target="_blank"></a>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-batch-cancel-job" class="btn btn-danger hidden">⏹ Stop</button>
+          <button id="btn-batch-new" class="btn btn-secondary hidden">← New Batch</button>
+          <button id="btn-batch-modal-cancel" class="btn btn-secondary">Close</button>
+          <button id="btn-batch-start" class="btn btn-primary">⚡ Start Batch Convert</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Notification Toast -->
     <div id="toast" class="toast"></div>
 
@@ -228,6 +464,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=ff2-folder-selection-1"></script>
+  <script src="app.js?v=magfilter-1"></script>
 </body>
 </html>

@@ -7,6 +7,8 @@ this entry point for PK2 payloads; it intentionally does not auto-detect
 formats.
 """
 
+import os
+import re
 import struct
 
 from .pz_sgd_ff3 import (
@@ -35,8 +37,15 @@ def parse_sgd(data, name="sgd", lit_data=None, external_bones=None):
         name=name,
         lit_data=lit_data,
         external_bones=external_bones,
+        # FF1 SGDCOORDINATE rows carry a uniform ~1.919 scale that Obscura
+        # removes via StripCoordinateScale (Obscura-ff1
+        # ModelConverter/game/Model.cpp:33) before using the matrix as a world
+        # transform.  FF3 matrices are already unit length, so this stays
+        # opt-in and the FF2/FF3 entry points are unaffected.
+        strip_bone_scale=True,
     )
     if model:
+        model.sgd_format = "ff1"
         # FF1 SGD UVs use the opposite vertical origin from the PNG images
         # produced by the GS deswizzler.  Preserve that fact for both the
         # viewer and exporters so the V coordinate is not inverted twice.
@@ -70,6 +79,19 @@ def parse_sgd(data, name="sgd", lit_data=None, external_bones=None):
     return model
 
 
+def is_ff1_sgd(data, path=""):
+    """Recognize standalone FF1 item SGDs without affecting FF3 dispatch."""
+    normalized_path = str(path).replace("\\", "/").lower()
+    basename = os.path.basename(normalized_path)
+    return (
+        "/item/" in normalized_path
+        or "/furniture/" in normalized_path
+        or "/door/" in normalized_path
+        or "_pk2_linked" in normalized_path
+        or re.search(r"(?:^|[-_])i\d{3}(?:_|$)", basename) is not None
+    )
+
+
 def merge_sgd_models(base_model, extra_model):
     """Merge FF1 models while retaining the canonical GS TEX0 alias."""
     model = _merge_sgd_models(base_model, extra_model)
@@ -87,6 +109,7 @@ __all__ = [
     "fix_colors",
     "fix_uv",
     "get_next_unpack",
+    "is_ff1_sgd",
     "merge_sgd_models",
     "normalize_mesh_normals",
     "parse_lit_lights",
