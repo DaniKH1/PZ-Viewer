@@ -5,16 +5,24 @@ Project Zero / Fatal Frame assets. Runs in its own native window through
 Microsoft Edge WebView2, renders through WebGL on the GPU, and needs no web
 browser tab.
 
+<img width="1919" height="1023" alt="image" src="https://github.com/user-attachments/assets/e913b78f-a2de-47b2-a2e9-4e09b47daeb8" />
+
+
 ---
 
 ## Current state — read this first
+
+- Each saved game path must point exactly to that game's `3ddata` folder.
+  The folder picker warns before opening and rejects other directories. Saved
+  paths from older versions that do not end in `3ddata` are cleared and must
+  be selected again.
 
 - Supports the PS2 releases of Fatal Frame 1–3, Fatal Frame 1 Xbox and Fatal
   Frame 2 Wii, including model viewing, texture inspection and 3D export.
 - Recent parser and viewer improvements include static room lighting,
   recovered vertex colors, Xbox PKX room textures, Wii character transparency,
-  game-specific asset filtering and organized per-game parser/documentation
-  packages.
+  expanded FF3 character labels, game-specific asset filtering and organized
+  per-game parser/documentation packages.
 - There is no automated test suite. Python module imports, the viewer/CLI
   entry points and documentation links should be checked when making changes.
 - Documentation is grouped by game; see the [documentation index](docs/README.md).
@@ -86,8 +94,9 @@ instead of the native window.
 
 Then pick a game folder once with **Select** on its row in the Asset Browser;
 the row remembers it, **Update** points it somewhere else and **✖** forgets it.
-Selecting the game's `3ddata` folder as the root is recommended, so sibling
-SGD, texture and linked resource files resolve correctly.
+For both **Select** and **Update**, choose exactly the game's `3ddata` folder.
+Selecting a parent or child folder is rejected. This root lets sibling SGD,
+texture and linked resource files resolve correctly.
 
 ---
 
@@ -97,6 +106,8 @@ SGD, texture and linked resource files resolve correctly.
   remembered.
 - **Reload** re-reads the current folder.
 - The filter box searches the listing.
+- Filtering keeps keyboard focus in the search box while the visible tree
+  selection updates.
 - Navigation never leaves the saved root. At a root there is no
   `.. (Parent Directory)` row, and the up control is gone — a folder with
   nothing loadable in it offers **`... (Parent Folder)`** instead.
@@ -166,8 +177,9 @@ loading untextured.
 **Themes** picks a palette or **Dynamic** to follow the folder you are
 browsing. Each game has its own: FF1, FF1 XBOX (the FF1 palette shifted a
 little), FF2 (amber and parchment, from the "Play Data" menu), FF2 Wii (crimson
-Butterfly), FF3 (cold gold). The icon at the top left is the camera of the game
-on screen.
+Butterfly), FF3 (cold gold). **Dynamic** is the default when no preference has
+been chosen; a manually selected theme is saved and restored when the viewer
+reopens. The icon at the top left is the camera of the game on screen.
 
 ---
 
@@ -218,18 +230,6 @@ python pz_export_cli.py "f:/r1x/man/mdl/m000_miku4.mpx" -f glb,obj -o ./exported
 
 ---
 
-## Known limitations
-
-- Some FF1 PS2 item, door and furniture textures still render grey; this is a
-  separate limitation from the room-lighting and Xbox PKX texture paths.
-- The camera fit has a 25-unit minimum distance, so small FF2 Wii props render
-  small in the viewport.
-- FF1 room surfaces that carry appearance in vertex colors rather than a
-  texture preview without a surface texture; enable **Vertex Colors** to see
-  their stored or baked color.
-
----
-
 ## Project layout
 
 ```
@@ -237,6 +237,7 @@ pz_viewer.py            native-window launcher
 pz_export_cli.py        command-line export
 run_viewer.bat          Windows launcher
 PZViewer_paths.json     saved game roots
+PZViewer_settings.json  saved viewer settings, including the selected theme
 viewer/                 HTTP server and the whole UI
   server.py             parsing, serialisation, export, file browsing
   static/app.js         scene, viewport, layers panel, theme picker

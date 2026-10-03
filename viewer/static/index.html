@@ -302,8 +302,8 @@
               The Asset Browser lists one row per release.
               <b>Original</b> holds the three PS2 games (FF1, FF2, FF3);
               <b>Extra</b> holds the two ports (FF1 XBOX, FF2 Wii).
-              Press <b>Select</b> on a row to choose its folder once, then the
-              row remembers it. <b>Update</b> points it somewhere else and
+              Press <b>Select</b> or <b>Update</b> and choose exactly the
+              game's <b>3ddata</b> folder. The row remembers it;
               <b>✖</b> forgets it.
             </p>
           </section>
@@ -369,6 +369,28 @@
         </div>
         <div class="modal-footer">
           <button id="btn-howto-done" class="btn btn-primary">Close</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="data-folder-notice" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content" style="max-width:480px;" role="alertdialog"
+           aria-modal="true" aria-labelledby="data-folder-notice-title"
+           aria-describedby="data-folder-notice-message">
+        <div class="modal-header">
+          <h2 id="data-folder-notice-title">Select the game data folder</h2>
+        </div>
+        <div class="modal-body">
+          <p id="data-folder-notice-message">
+            The selected directory must be the game's <b>3ddata</b> folder
+            itself—not its parent directory or a subfolder. Other directories
+            cannot be saved.
+          </p>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-data-folder-cancel" class="btn btn-secondary">Cancel</button>
+          <button id="btn-data-folder-continue" class="btn btn-primary">Choose directory</button>
         </div>
       </div>
     </div>
@@ -463,6 +485,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=ff2w-alpha-depth-1"></script>
+  <script src="app.js?v=theme-persistence-2"></script>
 </body>
 </html>

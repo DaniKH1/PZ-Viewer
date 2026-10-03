@@ -86,6 +86,7 @@ else:
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 EXPORTS_DIR = os.path.join(APP_DIR, "exports")
 PREFERENCES_FILE = os.path.join(APP_DIR, "PZViewer_paths.json")
+SETTINGS_FILE = os.path.join(APP_DIR, "PZViewer_settings.json")
 os.makedirs(EXPORTS_DIR, exist_ok=True)
 
 
@@ -100,6 +101,7 @@ GAME_LABELS = {
     "ff2w": "Fatal Frame 2 Wii Files",
     "ff3": "Fatal Frame 3 Files",
 }
+VALID_THEMES = {"default", "ff1", "ff1x", "ff2", "ff2w", "ff3", "dynamic"}
 
 XPR0_MAGIC = b"XPR0"
 
@@ -187,13 +189,56 @@ def load_folder_preferences():
     try:
         with open(PREFERENCES_FILE, "r", encoding="utf-8") as preferences:
             data = json.load(preferences)
-        return {
-            key: str(value).replace("\\", "/")
-            for key, value in data.items()
-            if key in GAME_IDS and isinstance(value, str) and value.strip()
-        }
+        if not isinstance(data, dict):
+            write_folder_preferences({})
+            return {}
+        paths = {}
+        for key, value in data.items():
+            if key not in GAME_IDS or not isinstance(value, str) or not value.strip():
+                continue
+            normalized = value.strip().replace("\\", "/")
+            if is_3ddata_directory(normalized):
+                paths[key] = normalized
+        if len(paths) != len(data):
+            write_folder_preferences(paths)
+        return paths
     except (OSError, ValueError, TypeError):
         return {}
+
+
+def is_3ddata_directory(path):
+    """Return whether a path names the game's 3ddata directory itself."""
+    normalized = os.path.normpath(str(path).strip())
+    return os.path.basename(normalized).casefold() == "3ddata"
+
+
+def write_folder_preferences(paths):
+    temporary = PREFERENCES_FILE + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as preferences:
+        json.dump(paths, preferences, indent=2)
+        preferences.write("\n")
+    os.replace(temporary, PREFERENCES_FILE)
+
+
+def load_theme_preference():
+    try:
+        with open(SETTINGS_FILE, "r", encoding="utf-8") as settings:
+            data = json.load(settings)
+        theme = data.get("theme") if isinstance(data, dict) else None
+        return theme if theme in VALID_THEMES else ""
+    except (OSError, ValueError, TypeError):
+        return ""
+
+
+def save_theme_preference(theme):
+    if theme not in VALID_THEMES:
+        raise ValueError("Unknown theme.")
+    temporary = SETTINGS_FILE + ".tmp"
+    with open(temporary, "w", encoding="utf-8") as settings:
+        json.dump({"theme": theme}, settings, indent=2)
+        settings.write("\n")
+    os.replace(temporary, SETTINGS_FILE)
+    return theme
 
 
 def save_folder_preference(game, path):
@@ -201,14 +246,15 @@ def save_folder_preference(game, path):
         return load_folder_preferences()
     paths = load_folder_preferences()
     if path and path.strip():
-        paths[game] = path.strip().replace("\\", "/")
+        normalized = path.strip().replace("\\", "/")
+        if not is_3ddata_directory(normalized):
+            raise ValueError("Select the game's 3ddata folder itself.")
+        if not os.path.isdir(normalized):
+            raise ValueError("The selected 3ddata folder does not exist.")
+        paths[game] = normalized
     else:
         paths.pop(game, None)
-    temporary = PREFERENCES_FILE + ".tmp"
-    with open(temporary, "w", encoding="utf-8") as preferences:
-        json.dump(paths, preferences, indent=2)
-        preferences.write("\n")
-    os.replace(temporary, PREFERENCES_FILE)
+    write_folder_preferences(paths)
     return paths
 
 
@@ -301,20 +347,58 @@ FF3_CHARACTER_DISPLAY_NAMES = {
     "ch007": "Miku",
     "ch008": "Yuu",
     "ch009": "Mio",
-    "ch010": "Yuu",
+    "ch010": "Kaname",
     "ch011": "Mafuyu",
     "ch012": "Yoshino",
+    "ch013": "Tsuzuri",
+    "ch014": "Musubi",
+    "ch015": "Ruri",
+    "ch017": "Kyouka",
     "ch018": "Miku",
+    "ch019": "Ruri",
+    "ch020": "Kyouka",
     "ch021": "Yoshino",
-    "ch050": "Mayu",
+    "ch022": "Black Shadow",
+    "ch023": "Makie",
+    "ch024": "Makie",
+    "ch027": "Engraver",
+    "ch028": "Kiriko",
+    "ch029": "Tengai",
+    "ch030": "Shrine Carpenter",
+    "ch031": "Kizuna",
     "ch032": "Reika",
+    "ch033": "Hisame",
     "ch034": "Yashuu",
+    "ch035": "Kusabi",
+    "ch036": "Reika",
+    "ch037": "Shrine Carpenter",
+    "ch038": "Engraved Men",
+    "ch039": "Shigure",
+    "ch040": "Minamo",
+    "ch041": "Amane",
+    "ch042": "Engraver",
+    "ch043": "Yashuu Hands",
+    "ch044": "Yashuu Hand",
+    "ch045": "Yashuu Hand",
+    "ch046": "Yashuu Hand",
+    "ch047": "Yashuu Hand",
+    "ch048": "Stroller Grandma",
+    "ch050": "Mayu",
+    "ch051": "Masumi",
     "ch052": "Reika",
+    "ch055": "Ropes",
     "ch056": "Yoshino",
     "ch058": "Reika",
+    "ch059": "Amane",
     "ch060": "Reika",
+    "ch061": "Tengai",
+    "ch062": "Hisame",
+    "ch063": "Shigure",
+    "ch064": "Minamo",
+    "ch065": "Amane",
     "ch066": "Miku",
     "ch067": "Miku",
+    "ch068": "Amane",
     "ch200": "Rei",
     "ch201": "Rei",
     "ch202": "Rei",
@@ -2401,6 +2485,13 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
             self.wfile.write(json.dumps(load_folder_preferences()).encode('utf-8'))
             return
 
+        if parsed.path == '/api/theme':
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps({"theme": load_theme_preference()}).encode('utf-8'))
+            return
+
         if parsed.path == '/api/browse':
             qs = parse_qs(parsed.query)
             target_dir = qs.get('dir', [''])[0].strip()
@@ -2606,8 +2697,9 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
             if resp["chosen"] and game in GAME_IDS:
                 try:
                     save_folder_preference(game, resp["chosen"])
-                except OSError as exc:
-                    _LOAD_LOGGER.warning("Could not save folder preference: %s", exc)
+                except (OSError, ValueError) as exc:
+                    resp["chosen"] = ""
+                    resp["error"] = str(exc)
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
@@ -2708,6 +2800,21 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
         content_length = int(self.headers.get('Content-Length', 0))
         post_data = self.rfile.read(content_length)
 
+        if parsed.path == '/api/theme':
+            try:
+                req = json.loads(post_data.decode('utf-8')) if post_data else {}
+                theme = save_theme_preference(req.get("theme", ""))
+                response = {"theme": theme}
+                status_code = 200
+            except (OSError, ValueError, TypeError) as exc:
+                response = {"error": str(exc)}
+                status_code = 400 if isinstance(exc, ValueError) else 500
+            self.send_response(status_code)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(response).encode('utf-8'))
+            return
+
         if parsed.path == '/api/export_textures':
             req = json.loads(post_data.decode('utf-8')) if post_data else {}
             model = CURRENT_STATE.get("model")
@@ -2761,7 +2868,7 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                 status_code = 200
             except (OSError, ValueError, TypeError) as exc:
                 preferences = {"error": str(exc)}
-                status_code = 500
+                status_code = 400 if isinstance(exc, ValueError) else 500
             self.send_response(status_code)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()

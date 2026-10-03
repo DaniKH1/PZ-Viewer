@@ -78,6 +78,11 @@ const PZ_GAME_THEME = {
   ff1: 'ff1', ff1x: 'ff1x', ff2: 'ff2', ff2w: 'ff2w', ff3: 'ff3'
 };
 
+function is3ddataDirectory(path) {
+  const normalized = String(path || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  return normalized.slice(normalized.lastIndexOf('/') + 1).toLowerCase() === '3ddata';
+}
+
 /**
  * A readable name for one layer group. These formats name their materials
  * ("m000_sodena", "m001_eye02.tm2"), so that is what a row shows; when the
@@ -128,6 +133,7 @@ class PZViewerApp {
     this.exportDestination = '';
     this.showBones = false;
     this.currentTheme = this.readStoredTheme();
+    this.themeSelectionRevision = 0;
     // Xbox recolour support: which archive is bound, and the asset it came from.
     this.currentSourcePath = '';
     this.xprVariantList = null;
@@ -140,10 +146,12 @@ class PZViewerApp {
     this.currentRootTab = PZ_DEFAULT_ROOT_TAB;
     // VRAM slot currently enlarged in the lightbox, or null.
     this.currentTexturePreview = null;
+    this.dataFolderNoticeResolver = null;
 
     this.initThreeGPU();
     this.initUI();
     this.initEventListeners();
+    this.restoreThemePreference();
     this.restoreGamePaths();
 
     this.animate = this.animate.bind(this);
@@ -419,6 +427,21 @@ class PZViewerApp {
     return PZ_THEMES.indexOf(stored) !== -1 ? stored : PZ_DEFAULT_THEME;
   }
 
+  async restoreThemePreference() {
+    const revision = this.themeSelectionRevision;
+    try {
+      const response = await fetch('/api/theme?_=' + Date.now(), { cache: 'no-store' });
+      if (!response.ok) throw new Error('Saved theme could not be loaded.');
+      const data = await response.json();
+      if (revision === this.themeSelectionRevision &&
+          PZ_THEMES.indexOf(data.theme) !== -1 && data.theme !== this.currentTheme) {
+        this.applyTheme(data.theme, false);
+      }
+    } catch (err) {
+      console.warn('Server theme preference could not be read:', err);
+    }
+  }
+
   /**
    * The palette that `data-theme` should actually carry. For every concrete
    * theme this is the theme itself; for 'dynamic' it is the palette of the
@@ -521,8 +544,9 @@ initThemePicker() {
    * Swaps the active theme. Only the data-theme attribute changes, so the DOM
    * is never touched and nothing in the WebGL scene is re-created.
    */
-  applyTheme(theme) {
+  applyTheme(theme, persist = true) {
     const next = PZ_THEMES.indexOf(theme) !== -1 ? theme : PZ_DEFAULT_THEME;
+    if (persist) this.themeSelectionRevision += 1;
     this.currentTheme = next;
     document.documentElement.setAttribute('data-theme', this.effectiveTheme());
     this.updateCornerIcon();
@@ -531,6 +555,20 @@ initThemePicker() {
       localStorage.setItem(PZ_THEME_KEY, next);
     } catch (err) {
       console.warn('Theme could not be saved:', err);
+    }
+    if (persist) {
+      fetch('/api/theme', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme: next })
+      }).then(async (response) => {
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || 'Saved theme could not be written.');
+        }
+      }).catch((err) => {
+        console.warn('Server theme preference could not be saved:', err);
+      });
     }
   }
 
@@ -608,6 +646,22 @@ initThemePicker() {
       if (backdrop) backdrop.addEventListener('click', close);
     });
 
+    const dataFolderNotice = document.getElementById('data-folder-notice');
+    const resolveDataFolderNotice = (confirmed) => {
+      if (dataFolderNotice) dataFolderNotice.classList.add('hidden');
+      if (this.dataFolderNoticeResolver) {
+        this.dataFolderNoticeResolver(confirmed);
+        this.dataFolderNoticeResolver = null;
+      }
+    };
+    const continueButton = document.getElementById('btn-data-folder-continue');
+    const cancelButton = document.getElementById('btn-data-folder-cancel');
+    if (continueButton) continueButton.addEventListener('click', () => resolveDataFolderNotice(true));
+    if (cancelButton) cancelButton.addEventListener('click', () => resolveDataFolderNotice(false));
+    const noticeBackdrop = dataFolderNotice && dataFolderNotice.querySelector('.modal-backdrop');
+    if (noticeBackdrop) noticeBackdrop.addEventListener('click', () => resolveDataFolderNotice(false));
+    this.resolveDataFolderNotice = resolveDataFolderNotice;
+
     // The viewport toggles say what they do by changing what they draw, not by
     // lighting up, so the browser's focus ring is taken off them: it otherwise
     // sits on whichever was pressed last and reads as a selection the user did
@@ -662,6 +716,12 @@ initThemePicker() {
         case 'Escape':
           if (this.currentTexturePreview) this.closeTexturePreview();
           this.closeThemeMenu();
+          if (this.resolveDataFolderNotice &&
+              document.getElementById('data-folder-notice') &&
+              !document.getElementById('data-folder-notice').classList.contains('hidden')) {
+            this.resolveDataFolderNotice(false);
+            break;
+          }
           // Read-only dialogs first: Escape should close the topmost thing, and
           // leaving one open while dismissing a preview behind it is not that.
           ['credits-modal', 'howto-modal'].forEach((id) => {
@@ -767,29 +827,42 @@ initThemePicker() {
   }
 
   async restoreGamePaths() {
+    let serverPaths = {};
     try {
       const response = await fetch('/api/preferences?_=' + Date.now(), { cache: 'no-store' });
       if (response.ok) {
-        const savedPaths = await response.json();
-        PZ_GAME_IDS.forEach((game) => {
-          if (savedPaths[game]) {
-            localStorage.setItem('pzviewer.' + game + 'Path', savedPaths[game]);
-          }
-        });
-        localStorage.setItem('pzviewer.savedPaths', JSON.stringify(savedPaths));
+        serverPaths = await response.json();
       }
     } catch (err) {
       console.warn('Server folder preferences could not be read:', err);
     }
-    let firstPath = '';
-    let firstGame = '';
-    this.currentBrowserGame = '';
-    let savedPaths = {};
+    let previousPaths = {};
     try {
-      savedPaths = JSON.parse(localStorage.getItem('pzviewer.savedPaths') || '{}');
+      const parsedPaths = JSON.parse(localStorage.getItem('pzviewer.savedPaths') || '{}');
+      if (parsedPaths && typeof parsedPaths === 'object' && !Array.isArray(parsedPaths)) {
+        previousPaths = parsedPaths;
+      }
     } catch (err) {
       console.warn('Saved folder preferences could not be read:', err);
     }
+    const savedPaths = {};
+    PZ_GAME_IDS.forEach((game) => {
+      const serverPath = serverPaths[game];
+      const localPath = localStorage.getItem('pzviewer.' + game + 'Path') ||
+        previousPaths[game] || '';
+      const path = is3ddataDirectory(serverPath) ? serverPath :
+        (is3ddataDirectory(localPath) ? localPath : '');
+      if (path) {
+        savedPaths[game] = path;
+        localStorage.setItem('pzviewer.' + game + 'Path', path);
+      } else {
+        localStorage.removeItem('pzviewer.' + game + 'Path');
+      }
+    });
+    localStorage.setItem('pzviewer.savedPaths', JSON.stringify(savedPaths));
+    let firstPath = '';
+    let firstGame = '';
+    this.currentBrowserGame = '';
     // Which folder the browser opens on load. The active tab's games go first, so
     // reloading while the Extra tab is showing reopens the Wii folder rather than
     // jumping back to a PS2 one; the rest of the games are the fallback for when
@@ -817,6 +890,10 @@ initThemePicker() {
     if (PZ_GAME_IDS.indexOf(game) === -1) return;
     const normalizedPath = (path || '').trim();
     if (!normalizedPath) return;
+    if (!is3ddataDirectory(normalizedPath)) {
+      this.showToast("Select the game's 3ddata folder itself.", 'error');
+      return;
+    }
     try {
       localStorage.setItem('pzviewer.' + game + 'Path', normalizedPath);
       const savedPaths = {};
@@ -830,7 +907,15 @@ initThemePicker() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ game: game, path: normalizedPath })
-      }).catch((err) => console.warn('Folder preference could not be saved:', err));
+      }).then(async (response) => {
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || 'Could not save the selected folder.');
+        }
+      }).catch((err) => {
+        console.warn('Folder preference could not be saved:', err);
+        this.showToast('Folder preference error: ' + err.message, 'error');
+      });
     } catch (err) {
       console.warn('Folder preference could not be saved:', err);
     }
@@ -961,12 +1046,29 @@ initThemePicker() {
   }
 
   async chooseSavedRoot(game) {
+    const notice = document.getElementById('data-folder-notice');
+    if (!notice) return;
+    notice.classList.remove('hidden');
+    document.getElementById('btn-data-folder-continue')?.focus();
+    const confirmed = await new Promise((resolve) => {
+      this.dataFolderNoticeResolver = resolve;
+    });
+    if (!confirmed) return;
+
     const path = localStorage.getItem('pzviewer.' + game + 'Path') || '';
     try {
       const res = await fetch('/api/choose_folder?game=' + game +
         '&dir=' + encodeURIComponent(path));
       const data = await res.json();
+      if (data.error) {
+        this.showToast(data.error, 'error');
+        return;
+      }
       if (data.chosen) {
+        if (!is3ddataDirectory(data.chosen)) {
+          this.showToast("Select the game's 3ddata folder itself.", 'error');
+          return;
+        }
         this.saveGamePath(game, data.chosen);
         this.renderSavedRoots();
         document.getElementById('input-dir').value = data.chosen;
@@ -1109,11 +1211,11 @@ initThemePicker() {
     return notice;
   }
 
-  setFileTreeSelection(row) {
+  setFileTreeSelection(row, focusTree = true) {
     if (!row || !row.dataset.path) return;
     this.selectedBrowserPath = row.dataset.path;
     const fileList = document.getElementById('file-list');
-    if (fileList && document.activeElement !== fileList) {
+    if (focusTree && fileList && document.activeElement !== fileList) {
       fileList.focus({ preventScroll: true });
     }
     document.querySelectorAll('#file-list .file-item.selected').forEach((selectedRow) => {
@@ -1147,7 +1249,9 @@ initThemePicker() {
     });
     if (!document.querySelector('#file-list .file-item.selected:not([hidden])')) {
       const firstVisible = document.querySelector('#file-list .file-item:not([hidden])');
-      if (firstVisible) this.setFileTreeSelection(firstVisible);
+      // Filtering runs on every keystroke; moving focus to the tree here would
+      // interrupt typing as soon as the current selection is filtered out.
+      if (firstVisible) this.setFileTreeSelection(firstVisible, false);
     }
   }
 
