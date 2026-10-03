@@ -18,16 +18,11 @@ browser tab.
   be selected again.
 
 - Supports the PS2 releases of Fatal Frame 1–3, Fatal Frame 1 Xbox, Fatal
-  Frame 2 Xbox, and Fatal Frame 2 Wii.
+  Frame 2 Xbox and Fatal Frame 2 Wii.
 - Recent viewer/parser work includes static FF1 room lighting, recovered
   FF2 PS2 room vertex colors, native Xbox PKX/MPX and FF2 Xbox 0x1070 model
   support, Wii character alpha masks, FF2 Xbox baked room colors, expanded
   FF3 character labels, and game-specific file-tree filtering.
-- A Windows one-file executable is available as `PZViewer.exe` in the project
-  root; see
-  [Running the executable](#running-the-executable). It uses the installed
-  Microsoft Edge WebView2 runtime for its native window and can fall back to
-  the system browser.
 - There is no automated test suite. Python module imports, the viewer/CLI
   entry points and documentation links should be checked when making changes.
 - Documentation is grouped by game; see the [documentation index](docs/README.md)
@@ -153,21 +148,30 @@ python pz_viewer.py
 Or double-click `run_viewer.bat`. Add `--browser` to open in your own browser
 instead of the native window.
 
-### Running the executable
+The viewer runs from the Python source. On Windows, `run_viewer.bat` starts
+`pz_viewer.py`; the native window uses Microsoft Edge WebView2 and falls back
+to the system browser if WebView startup is unavailable.
 
-On Windows, run `PZViewer.exe` from the project root. The current one-file build was smoke
-tested by starting it and confirming that its local viewer page returned
-HTTP 200. For a development build, use the same environment as the source and
-run:
+### Build a Windows executable
+
+The repository contains the Python source and launcher only; you can build a
+local one-file executable on Windows with Python installed. From the project
+root, install the runtime and build dependencies:
+
+```powershell
+python -m pip install numpy Pillow pywebview PyInstaller
+```
+
+Then run:
 
 ```powershell
 python -m PyInstaller --noconfirm --clean --onefile --windowed --name PZViewer --icon .\pzviewer.ico --add-data "viewer\static;viewer\static" --collect-all webview --hidden-import webview.platforms.edgechromium --hidden-import webview.platforms.winforms --hidden-import tkinter --hidden-import tkinter.filedialog .\pz_viewer.py
 ```
 
-The build writes `dist\PZViewer.exe`; copy it to the project root if you want
-to keep it next to `run_viewer.bat`. Windows needs the Microsoft Edge
-WebView2 runtime for the native window. The launcher falls back to the system
-browser if native WebView startup is unavailable.
+PyInstaller writes the executable to `dist\PZViewer.exe`. This is a local
+build artifact and is not included in the repository. The native window
+requires the Microsoft Edge WebView2 Runtime; if it is unavailable, the
+launcher falls back to the system browser.
 
 Then pick a game folder once with **Select** on its row in the Asset Browser;
 the row remembers it, **Update** points it somewhere else and **✖** forgets it.
