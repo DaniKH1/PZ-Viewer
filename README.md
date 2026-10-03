@@ -38,7 +38,7 @@ browser tab.
 | | Fatal Frame 2 (PS2) | `.pk2`, `.sgd`, `.tim2`, `.tm2` |
 | | Fatal Frame 3 (PS2) | `.pk4`, `.sgd`, `.tm2` |
 | **Extra** | Fatal Frame 1 XBOX | `.mpx`, `.pkx` |
-| | Fatal Frame 2 XBOX | `.mdl`, `.pk2` (matching `.ppd` required) |
+| | Fatal Frame 2 XBOX | `.mdl`, `.pk2`, `.ppd` |
 | | Fatal Frame 2 Wii | `.mdlb`, `.pk2b` |
 
 The two Xbox/Wii ports live on their own tab because each is a port of a game
