@@ -383,6 +383,7 @@ FF3_CHARACTER_DISPLAY_NAMES = {
     "ch046": "Yashuu Hand",
     "ch047": "Yashuu Hand",
     "ch048": "Stroller Grandma",
+    "ch049": "Fallen Woman",
     "ch050": "Mayu",
     "ch051": "Masumi",
     "ch052": "Reika",
