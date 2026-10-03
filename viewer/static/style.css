@@ -1642,7 +1642,8 @@ body {
    ivory does that. The single cool note is the slate blue reserved for
    links, so a URL never reads as part of the ornament.
    ---------------------------------------------------------------------- */
-[data-theme="ff2"] {
+[data-theme="ff2"],
+[data-theme="ff2x"] {
   /* surfaces: dark walnut, warm at every level */
   --bg-primary: #150d06;             /* deep walnut-black */
   --bg-secondary: #1f1409;          /* panel */
@@ -1719,50 +1720,131 @@ body {
   --amber-deep: #8f5a18;
 }
 
+/* FF2 Xbox follows the cover's charred blacks, ember orange and deep
+   butterfly red. It stays close to the PS2 walnut-and-amber palette. */
+[data-theme="ff2x"] {
+  --bg-primary: #140b08;
+  --bg-secondary: #21120d;
+  --bg-tertiary: #2f1a12;
+  --bg-sunken: #190e0b;
+  --bg-hover: #482416;
+
+  --accent-color: #d87532;
+  --accent-hover: #ee8d43;
+  --accent-cyan: #e2ad62;
+  --accent-red: #b63829;
+  --on-accent: #1a0c06;
+
+  --text-primary: #f0e1cb;
+  --text-secondary: #c4a486;
+  --text-muted: #92715a;
+  --on-panel: #f0e1cb;
+
+  --border-color: #6a3823;
+  --border-light: #9a5b32;
+  --view-bg: #100806;
+  --panel-glass: rgba(33, 18, 13, 0.92);
+  --scrim-soft: rgba(12, 5, 3, 0.56);
+  --scrim: rgba(12, 5, 3, 0.77);
+  --overlay-bg: rgba(20, 10, 7, 0.84);
+  --label-scrim: rgba(16, 7, 5, 0.82);
+  --texture-grid-bg: #190e0b;
+
+  --danger-solid: #b63829;
+  --danger-solid-hover: #8f2c22;
+  --ok-text: #dfbd7a;
+  --ok-core: #c59a44;
+  --ok-tint: rgba(197, 154, 68, 0.13);
+  --ok-tint-border: rgba(197, 154, 68, 0.32);
+  --warn-text: #f09a51;
+  --root-text: #ba6840;
+  --link-text: #9bb6c0;
+
+  --spinner-track: rgba(216, 117, 50, 0.22);
+  --progress-track: #24130d;
+  --progress-border: #6a3823;
+  --progress-a: #d87532;
+  --progress-b: #e2ad62;
+  --log-bg: #190e0b;
+  --log-border: #6a3823;
+  --log-text: #c4a486;
+  --log-ok: #dfbd7a;
+  --log-skip: #c59a44;
+  --log-err: #b63829;
+
+  --field-bg: #2f1a12;
+  --field-border: #6a3823;
+  --field-text: #f0e1cb;
+  --slate-text: #c4a486;
+  --slate-dim: #92715a;
+  --done-bg: #302515;
+  --done-border: #9c7940;
+  --extract-bg: #a95024;
+
+  --amber: #cb702c;
+  --amber-bright: #f0a45c;
+  --amber-deep: #8a451f;
+}
+
 /* Gold rule: title, dialog headings and the theme control itself. */
-[data-theme="ff2"] .logo h1 {
+[data-theme="ff2"] .logo h1,
+[data-theme="ff2x"] .logo h1 {
   color: var(--amber-bright);
 }
-[data-theme="ff2"] .modal-header h2 {
+[data-theme="ff2"] .modal-header h2,
+[data-theme="ff2x"] .modal-header h2 {
   color: var(--amber-bright);
 }
-[data-theme="ff2"] #btn-themes {
+[data-theme="ff2"] #btn-themes,
+[data-theme="ff2x"] #btn-themes {
   color: var(--amber-bright);
   border-color: var(--amber-deep);
 }
-[data-theme="ff2"] #btn-themes:hover {
+[data-theme="ff2"] #btn-themes:hover,
+[data-theme="ff2x"] #btn-themes:hover {
   border-color: var(--amber);
 }
-[data-theme="ff2"] .btn-icon:hover {
+[data-theme="ff2"] .btn-icon:hover,
+[data-theme="ff2x"] .btn-icon:hover {
   color: var(--amber-bright);
 }
-[data-theme="ff2"] .file-item.dir:hover {
+[data-theme="ff2"] .file-item.dir:hover,
+[data-theme="ff2x"] .file-item.dir:hover {
   color: var(--amber-bright);
 }
 
 /* The lantern bloom behind the frame, and the ember rim on the floating
    controls. Shadows only, so nothing reflows. */
-[data-theme="ff2"] .topbar {
+[data-theme="ff2"] .topbar,
+[data-theme="ff2x"] .topbar {
   box-shadow: 0 8px 22px -14px rgba(217, 139, 43, 0.5);
 }
-[data-theme="ff2"] .viewport-controls {
+[data-theme="ff2"] .viewport-controls,
+[data-theme="ff2x"] .viewport-controls {
   box-shadow: 0 10px 26px -14px rgba(224, 180, 88, 0.42);
 }
 /* The gold double rule around a dialog, as on the Play Data card. */
 [data-theme="ff2"] .layers-modal-content,
-[data-theme="ff2"] .modal-content {
+[data-theme="ff2"] .modal-content,
+[data-theme="ff2x"] .layers-modal-content,
+[data-theme="ff2x"] .modal-content {
   box-shadow: 0 0 0 1px rgba(224, 180, 88, 0.18), 0 18px 34px rgba(0, 0, 0, 0.62);
 }
 
 [data-theme="ff2"] .file-filter,
-[data-theme="ff2"] .stats-table {
+[data-theme="ff2"] .stats-table,
+[data-theme="ff2x"] .file-filter,
+[data-theme="ff2x"] .stats-table {
   background: var(--bg-sunken);
 }
 
 /* Native controls: colour only, widths untouched. */
 [data-theme="ff2"] input[type="checkbox"],
 [data-theme="ff2"] input[type="radio"],
-[data-theme="ff2"] input[type="range"] {
+[data-theme="ff2"] input[type="range"],
+[data-theme="ff2x"] input[type="checkbox"],
+[data-theme="ff2x"] input[type="radio"],
+[data-theme="ff2x"] input[type="range"] {
   accent-color: var(--accent-color);
 }
 [data-theme="ff2"] .sidebar,
@@ -1772,9 +1854,28 @@ body {
 [data-theme="ff2"] .texture-grid,
 [data-theme="ff2"] .batch-log,
 [data-theme="ff2"] .modal-body,
-[data-theme="ff2"] #mesh-layers {
+[data-theme="ff2"] #mesh-layers,
+[data-theme="ff2x"] .sidebar,
+[data-theme="ff2x"] .file-list,
+[data-theme="ff2x"] .layers-panel,
+[data-theme="ff2x"] .layers-modal-content,
+[data-theme="ff2x"] .texture-grid,
+[data-theme="ff2x"] .batch-log,
+[data-theme="ff2x"] .modal-body,
+[data-theme="ff2x"] #mesh-layers {
   scrollbar-color: var(--border-light) var(--bg-primary);
   scrollbar-width: auto;
+}
+
+[data-theme="ff2x"] .topbar {
+  box-shadow: 0 8px 22px -14px rgba(216, 117, 50, 0.52);
+}
+[data-theme="ff2x"] .viewport-controls {
+  box-shadow: 0 10px 26px -14px rgba(182, 56, 41, 0.38);
+}
+[data-theme="ff2x"] .layers-modal-content,
+[data-theme="ff2x"] .modal-content {
+  box-shadow: 0 0 0 1px rgba(216, 117, 50, 0.2), 0 18px 34px rgba(0, 0, 0, 0.64);
 }
 
 /* ── FF2 Wii Theme ─────────────────────────────────────────────────────────

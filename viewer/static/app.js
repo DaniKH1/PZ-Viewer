@@ -9,8 +9,8 @@
 // what stops a reload from flashing the wrong palette.
 const PZ_THEME_KEY = 'pzviewer.theme';
 // Picker order, 'dynamic' last on purpose: it is a mode rather than a palette,
-// so it belongs after the four concrete choices.
-const PZ_THEMES = ['default', 'ff1', 'ff1x', 'ff2', 'ff2w', 'ff3', 'dynamic'];
+// so it belongs after the concrete theme choices.
+const PZ_THEMES = ['default', 'ff1', 'ff1x', 'ff2', 'ff2x', 'ff2w', 'ff3', 'dynamic'];
 // The theme picker's contents, in the order they are listed. No icons: the list
 // is a list of names, and the picture that stands for each game lives in the
 // top-left corner instead, where it says which game is actually on screen rather
@@ -28,6 +28,7 @@ const PZ_THEME_ITEMS = [
   { id: 'ff1', label: 'FF1', icon: 'img:theme-ff1.png' },
   { id: 'ff1x', label: 'FF1 XBOX', icon: 'img:theme-ff1.png' },
   { id: 'ff2', label: 'FF2', icon: 'img:theme-ff2.png' },
+  { id: 'ff2x', label: 'FF2 XBOX', icon: 'img:theme-ff2x.png' },
   { id: 'ff2w', label: 'FF2 Wii', icon: 'img:theme-ff2w.png' },
   { id: 'ff3', label: 'FF3', icon: 'img:theme-ff3.png' },
   { id: 'dynamic', label: 'Dynamic', icon: 'img:app-icon.png' }
@@ -44,43 +45,60 @@ const PZ_DEFAULT_THEME = 'dynamic';
 // that folder across reloads so the first paint already resolves correctly.
 const PZ_DYNAMIC_KEY = 'pzviewer.dynamicGame';
 const PZ_DYNAMIC_FALLBACK = 'ff3';
-// Asset Browser rows. "ff2w" is the Wii release of Fatal Frame 2: its models
-// live in .mdlb / .pk2b containers, so it browses a different extension set
-// but reuses the same folder plumbing as the PS2 releases.
+// "ff2w" is the Wii release of Fatal Frame 2. FF2 Xbox model files are parsed
+// with their companion PPD buffers by the FF2X server path.
 const PZ_GAMES = [
   { id: 'ff1', label: 'Fatal Frame 1 Files' },
   { id: 'ff1x', label: 'Fatal Frame 1 XBOX Files' },
   { id: 'ff2', label: 'Fatal Frame 2 Files' },
+  { id: 'ff2x', label: 'Fatal Frame 2 XBOX Files' },
   { id: 'ff2w', label: 'Fatal Frame 2 Wii Files' },
   { id: 'ff3', label: 'Fatal Frame 3 Files' },
 ];
 // The Asset Browser's saved roots, split over two tabs.
 //
-// 'Original' holds the three PS2 releases. 'Extra' holds the two ports, which
+// 'Original' holds the three PS2 releases. 'Extra' holds the ports, which
 // are kept off the main list on purpose: each is a port of a game that already
-// has a tab, each browses a different container set (.mpx for the FF1 Xbox
-// build, .mdlb / .pk2b for FF2 Wii), and side by side two "Fatal Frame 2" rows
-// with nothing to tell them apart is worse than a second tab. The groups are
-// declared by id rather than by slicing the list above, so the split survives a
-// game being added, removed or renamed.
+// has a tab.
 const PZ_ROOT_TABS = [
   { id: 'original', label: 'Original', games: ['ff1', 'ff2', 'ff3'] },
-  { id: 'extra', label: 'Extra', games: ['ff1x', 'ff2w'] }
+  { id: 'extra', label: 'Extra', games: ['ff1x', 'ff2x', 'ff2w'] }
 ];
 const PZ_ROOT_TAB_KEY = 'pzviewer.rootTab';
 const PZ_DEFAULT_ROOT_TAB = 'original';
 const PZ_GAME_IDS = PZ_GAMES.map((g) => g.id);
-// Which theme a game resolves to under Dynamic. The two ports get their own: the
-// Wii release of Fatal Frame 2 has the crimson Butterfly menu where the PS2 build
-// has the amber "Play Data" one, and FF1's Xbox build is the same game with the
-// palette shifted, so it sits next to FF1 rather than replacing it.
+// Which theme a game resolves to under Dynamic. Ports with a distinct palette
+// get their own entry rather than replacing the original release's theme.
 const PZ_GAME_THEME = {
-  ff1: 'ff1', ff1x: 'ff1x', ff2: 'ff2', ff2w: 'ff2w', ff3: 'ff3'
+  ff1: 'ff1', ff1x: 'ff1x', ff2: 'ff2', ff2x: 'ff2x', ff2w: 'ff2w', ff3: 'ff3'
 };
 
 function is3ddataDirectory(path) {
   const normalized = String(path || '').replace(/\\/g, '/').replace(/\/+$/, '');
   return normalized.slice(normalized.lastIndexOf('/') + 1).toLowerCase() === '3ddata';
+}
+
+function fileCategoryIcon(path) {
+  const categories = String(path || '').replace(/\\/g, '/').toLowerCase().split('/');
+  if (categories.some((part) => part === 'door')) return '🚪';
+  if (categories.some((part) => part === 'furniture')) return '🪑';
+  if (categories.some((part) => part === 'mdl' || part === 'character')) return '🧍';
+  if (categories.some((part) => part === 'item')) return '🗝️';
+  if (categories.some((part) => part === 'room')) return '🌍';
+  return '';
+}
+
+function ff3DirectoryIcon(path, savedRoot) {
+  const normalizedPath = String(path || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const normalizedRoot = String(savedRoot || '').replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  const parent = normalizedPath.slice(0, normalizedPath.lastIndexOf('/'));
+  if (parent === normalizedRoot) return '📁';
+
+  const categories = normalizedPath.split('/');
+  if (categories.includes('accessory')) return '🎀';
+  if (categories.includes('fly')) return '🏹';
+  if (categories.includes('object')) return '🏺';
+  return fileCategoryIcon(normalizedPath) || '📁';
 }
 
 /**
@@ -1140,7 +1158,12 @@ initThemePicker() {
           }
           row.dataset.search = (item.name + ' ' + item.type).toLowerCase();
           const iconMap = { sgd_pack: '🧩', mdl: '🧍', mpk: '📦', sgd: '📄', cld: '🛡️', tm2: '🖼️', tim2: '🖼️', png: '🖼️', pk2: '📦', pk4: '📦' };
-          const icon = item.is_dir ? '📁' : (iconMap[item.type] || '📄');
+          const categoryIcon = fileCategoryIcon(item.path);
+          const icon = item.is_dir
+            ? (game === 'ff3'
+              ? ff3DirectoryIcon(item.path, localStorage.getItem('pzviewer.ff3Path'))
+              : '📁')
+            : (categoryIcon || iconMap[item.type] || '📄');
           const size = item.is_dir ? 'folder' : this.formatFileSize(item.size);
           row.innerHTML = '<span class="file-icon">' + icon + '</span><span class="file-name">' +
             item.name + '</span><span class="file-meta">' + size + '</span>';
@@ -1388,12 +1411,15 @@ initThemePicker() {
 
       // Shading defaults to textured for all model types (rooms, characters, props)
       this.shadingMode = 'textured';
-      // Baked FF1 Xbox room lighting is meaningful on textured surfaces, so
-      // show it automatically. Other assets start without vertex colours.
-      const roomLighting = (((data.diagnostics || {}).parser || {}).ff1_lighting || {});
+      // Baked Xbox room lighting is meaningful on textured surfaces, so show
+      // it automatically for FF1 Xbox and FF2 Xbox rooms.
+      const parserDiagnostics = (data.diagnostics || {}).parser || {};
+      const roomLighting = parserDiagnostics.ff1_lighting || {};
       this.vertexColorsOn =
-        roomLighting.format === 'ff1_xbox_static_vertex_lighting' &&
-        roomLighting.status === 'baked';
+        (roomLighting.format === 'ff1_xbox_static_vertex_lighting' &&
+         roomLighting.status === 'baked') ||
+        (parserDiagnostics.format === 'ff2x_1070' &&
+         (data.model_type === 'room' || data.type === 'room'));
 
       this.buildGPUScene(data);
       // After the scene, not before: the panel binds each row to the objects that

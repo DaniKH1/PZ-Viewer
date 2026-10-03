@@ -44,6 +44,7 @@ from pz_core.ff3.pz_sgd_ff3 import merge_sgd_models as merge_sgd_ff3, parse_sgd 
 from pz_core.ff2.pz_sgd_ff2 import merge_sgd_models as merge_sgd_ff2, parse_sgd as parse_sgd_ff2
 from pz_core.ff1.pz_mdl_ff1 import FF1MDLError, parse_ff1_mdl
 from pz_core.ff2.pz_mdl_ff2 import FF2MDLError, parse_ff2_mdl
+from pz_core.ff2x.pz_model_ff2x import FF2XError, parse_ff2x_model
 from pz_core.ff1x.pz_mpx_ff1x import XboxMPXError, parse_xbox_asset
 from pz_core.ff1x.pz_pkx_ff1x import PKXError, parse_pkx as parse_ff1x_pkx
 from pz_core.ff1x.pz_xpr0 import XPR0Error
@@ -90,18 +91,17 @@ SETTINGS_FILE = os.path.join(APP_DIR, "PZViewer_settings.json")
 os.makedirs(EXPORTS_DIR, exist_ok=True)
 
 
-# Games the Asset Browser can browse. "ff2w" is the Wii release of Fatal
-# Frame 2, whose models live in .mdlb / .pk2b containers instead of the PS2
-# SGD archives, so it needs its own parser but shares the same folder plumbing.
-GAME_IDS = ("ff1", "ff1x", "ff2", "ff2w", "ff3")
+# Games and releases shown in the Asset Browser.
+GAME_IDS = ("ff1", "ff1x", "ff2", "ff2x", "ff2w", "ff3")
 GAME_LABELS = {
     "ff1": "Fatal Frame 1 Files",
     "ff1x": "Fatal Frame 1 XBOX Files",
     "ff2": "Fatal Frame 2 Files",
+    "ff2x": "Fatal Frame 2 XBOX Files",
     "ff2w": "Fatal Frame 2 Wii Files",
     "ff3": "Fatal Frame 3 Files",
 }
-VALID_THEMES = {"default", "ff1", "ff1x", "ff2", "ff2w", "ff3", "dynamic"}
+VALID_THEMES = {"default", "ff1", "ff1x", "ff2", "ff2x", "ff2w", "ff3", "dynamic"}
 
 XPR0_MAGIC = b"XPR0"
 
@@ -167,6 +167,8 @@ GAME_EXTENSIONS = {
     # does not read. .mpk and .acs are non-standalone containers kept out of tree.
     'ff1x': ('.mpx', '.pkx'),
     'ff2': ('.mdl', '.pk2', '.sgd', '.tim2', '.tm2'),
+    # Xbox FF2 model containers require a same-stem .ppd vertex-buffer sidecar.
+    'ff2x': ('.mdl', '.pk2'),
     'ff3': ('.pk4', '.sgd', '.tm2'),
     'ff2w': ('.mdlb', '.pk2b'),
     'all': ('.mdl', '.pk2', '.pk4', '.sgd', '.cld', '.obj', '.tm2', '.tim2', '.png',
@@ -495,6 +497,25 @@ def is_hidden_ff2_camera_folder(target_dir, entry, saved_root, game):
 def is_hidden_ff2w_room_auxiliary_folder(target_dir, entry, saved_root, game):
     """Hide auxiliary MH/PZB/ZLD folders under FF2 Wii's room category."""
     if game != 'ff2w' or not saved_root or entry.casefold() not in {'mh', 'pzb', 'zld'}:
+        return False
+    room_dir = os.path.join(saved_root, 'room')
+    return os.path.normcase(os.path.abspath(target_dir)) == os.path.normcase(
+        os.path.abspath(room_dir)
+    )
+
+
+def is_hidden_ff2x_camera_folder(target_dir, entry, saved_root, game):
+    """Hide the camera folder directly under FF2 Xbox's configured root."""
+    if game != 'ff2x' or not saved_root or entry.casefold() != 'camera':
+        return False
+    return os.path.normcase(os.path.abspath(target_dir)) == os.path.normcase(
+        os.path.abspath(saved_root)
+    )
+
+
+def is_hidden_ff2x_room_auxiliary_folder(target_dir, entry, saved_root, game):
+    """Hide the MH, PZB and ZLD auxiliary folders under FF2 Xbox rooms."""
+    if game != 'ff2x' or not saved_root or entry.casefold() not in {'mh', 'pzb', 'zld'}:
         return False
     room_dir = os.path.join(saved_root, 'room')
     return os.path.normcase(os.path.abspath(target_dir)) == os.path.normcase(
@@ -1401,8 +1422,12 @@ def handle_load_file(file_path, game="", xpr_override=None):
     # the same one: the same MPX with a different XPR is a different colourway.
     if xpr_override:
         cache_key = (cache_key, os.path.normcase(os.path.abspath(xpr_override)))
-    # Xbox depends on a sidecar; do not reuse JSON-only cache/state from another asset.
-    xbox_sidecar_asset = os.path.splitext(file_path)[1].lower() in ('.mpx', '.xpr')
+    # Xbox model results depend on sidecars; do not reuse JSON-only cache/state
+    # when the associated texture or vertex-buffer payload may have changed.
+    ext_for_cache = os.path.splitext(file_path)[1].lower()
+    xbox_sidecar_asset = ext_for_cache in ('.mpx', '.xpr') or (
+        game.lower() == "ff2x" and ext_for_cache in (".mdl", ".pk2")
+    )
     cached = None if xbox_sidecar_asset else LOAD_CACHE.get(cache_key)
     if cached and cached[0] == cache_stamp:
         cached_response = dict(cached[1])
@@ -1465,7 +1490,30 @@ def handle_load_file(file_path, game="", xpr_override=None):
         else reconstruct_sgd_textures
     )
 
-    if ext == '.pk2':
+    if game.lower() == "ff2x" and ext in (".mdl", ".pk2"):
+        try:
+            ff2x_result = parse_ff2x_model(file_path, name=base_name)
+        except FF2XError as exc:
+            progress.error("ff2x_model_parse", exc)
+            return {"error": f"Unsupported or malformed FF2 Xbox model: {exc}"}
+        model = ff2x_result.model
+        model.parse_diagnostics = ff2x_result.diagnostics
+        textures = ff2x_result.textures
+        category = os.path.basename(os.path.dirname(file_path)).casefold()
+        model_type = (
+            "character" if category == "character" else
+            "room" if category == "room" else
+            "item" if category == "item" else
+            "prop"
+        )
+        geometry = ff2x_result.diagnostics["geometry"]
+        progress.log(
+            "ff2x_model_parse",
+            f"status=complete format={ff2x_result.diagnostics['format']} "
+            f"meshes={geometry['meshes']} materials={geometry['materials']} "
+            f"textures={len(textures)}"
+        )
+    elif ext == '.pk2':
         entries = unpack_pk2_parser(file_path)
         progress.log("pk2_extraction", f"entries={len(entries)}")
         if not entries:
@@ -1747,6 +1795,15 @@ def handle_load_file(file_path, game="", xpr_override=None):
             f"meshes={len(model.meshes)} materials={len(model.materials)} "
             f"textures={len(textures)}"
         )
+
+    elif ext == ".ppd" and game.lower() == "ff2x":
+        progress.error("ff2x_ppd_standalone", f"file={base_name}")
+        return {
+            "error": (
+                f"{base_name}.ppd is an FF2 Xbox model sidecar, not a standalone model. "
+                f"Open the matching .mdl or .pk2 instead."
+            )
+        }
 
     elif ext in ('.mdl', '.mpx', '.xpr'):
         # The PS2 and Xbox builds share both the PK2_HEAD container and the .mdl
@@ -2270,7 +2327,7 @@ def handle_load_file(file_path, game="", xpr_override=None):
         # model with more than one palette. Deciding it here keeps the rule out
         # of the frontend, which otherwise has to re-derive it from the file name.
         response["xpr_variant_switch"] = len(xpr_variants) > 1
-    if ext == '.pk2':
+    if ext == '.pk2' and game.lower() != "ff2x":
         response["diagnostics"].update({
             "pk2_entries": len(entries),
             "pk2_parsed": parsed_entries,
@@ -2612,6 +2669,12 @@ class PZViewerHandler(SimpleHTTPRequestHandler):
                             target_dir, entry, saved_root, game):
                         continue
                     if is_dir and is_hidden_ff2w_room_auxiliary_folder(
+                            target_dir, entry, saved_root, game):
+                        continue
+                    if is_dir and is_hidden_ff2x_camera_folder(
+                            target_dir, entry, saved_root, game):
+                        continue
+                    if is_dir and is_hidden_ff2x_room_auxiliary_folder(
                             target_dir, entry, saved_root, game):
                         continue
                     if not is_dir and is_hidden_ff2_empty_furniture_pk2(

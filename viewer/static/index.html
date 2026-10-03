@@ -5,7 +5,7 @@
   <link rel="icon" type="image/png" href="app-icon.png">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Project Zero / Fatal Frame - 3D Viewer & Extractor</title>
-  <link rel="stylesheet" href="style.css?v=themes-4">
+  <link rel="stylesheet" href="style.css?v=themes-7">
   <script>
     /* Restore the saved theme before first paint so there is no flash of the
        wrong palette. Mirrors PZ_THEME_KEY / PZ_DEFAULT_THEME / PZ_THEMES in
@@ -20,9 +20,9 @@
         if (theme === 'dynamic') {
           var game = localStorage.getItem('pzviewer.dynamicGame');
           /* FF2's two releases have their own palettes; mirrors PZ_GAME_THEME */
-          theme = { ff1: 'ff1', ff2: 'ff2', ff2w: 'ff2w', ff3: 'ff3' }[game] || 'ff3';
+          theme = { ff1: 'ff1', ff2: 'ff2', ff2x: 'ff2x', ff2w: 'ff2w', ff3: 'ff3' }[game] || 'ff3';
         }
-        if (theme === 'ff3' || theme === 'ff2' || theme === 'ff2w' ||
+        if (theme === 'ff3' || theme === 'ff2' || theme === 'ff2x' || theme === 'ff2w' ||
             theme === 'ff1' || theme === 'default') {
           document.documentElement.setAttribute('data-theme', theme);
         }
@@ -301,7 +301,10 @@
             <p>
               The Asset Browser lists one row per release.
               <b>Original</b> holds the three PS2 games (FF1, FF2, FF3);
-              <b>Extra</b> holds the two ports (FF1 XBOX, FF2 Wii).
+              <b>Extra</b> holds the ports (FF1 XBOX, FF2 XBOX, FF2 Wii).
+              FF2 XBOX model geometry loads from <code>.mdl</code> and
+              <code>.pk2</code> files with their matching <code>.ppd</code>
+              sidecars; supported P8 textures are decoded with their palettes.
               Press <b>Select</b> or <b>Update</b> and choose exactly the
               game's <b>3ddata</b> folder. The row remembers it;
               <b>✖</b> forgets it.
@@ -485,6 +488,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=theme-persistence-2"></script>
+  <script src="app.js?v=ff2x-room-colors-1"></script>
 </body>
 </html>

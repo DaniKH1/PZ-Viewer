@@ -146,7 +146,15 @@ def _normal(vector):
     return (vector / length).tolist() if length > 1e-12 else vector.tolist()
 
 
-def _entry(r, entry_index, model, skeletons, pose_template=None, pkx_compat=False):
+def _entry(
+    r,
+    entry_index,
+    model,
+    skeletons,
+    pose_template=None,
+    pkx_compat=False,
+    allow_auxiliary_category14=False,
+):
     h = r.values(0, "I", 10)
     ver, unknown1, unknown2, material_count, vb, vb_size, bone_ptr, mat_ptr, pool_ptr, block_count = h
     if ver != 0x1060:
@@ -278,8 +286,12 @@ def _entry(r, entry_index, model, skeletons, pose_template=None, pkx_compat=Fals
             if pool["offset"] + pool["size"] > table_start:
                 r.fail(pool["offset"], "unique source count exceeds its data region")
     elif ph[12]:
-        if max(pools[k]["offset"] + pools[k]["size"] for k in
-               ("weighted_positions", "weighted_normals")) != ph[12]:
+        pool_end = max(pools[k]["offset"] + pools[k]["size"] for k in
+                       ("weighted_positions", "weighted_normals"))
+        padding_size = ph[12] - pool_end
+        max_padding = 15 if pkx_compat else 0
+        if (padding_size < 0 or padding_size > max_padding
+                or any(r.data[pool_end:ph[12]])):
             r.fail(ph[12], "unexplained gap between source buffers and weighted groups")
     source_intervals = sorted((v["offset"], v["offset"] + v["size"]) for v in pools.values() if v["offset"])
     for (begin, end), (next_begin, _) in zip(source_intervals, source_intervals[1:]):
@@ -335,7 +347,7 @@ def _entry(r, entry_index, model, skeletons, pose_template=None, pkx_compat=Fals
              "pool_descriptor_offset": pool_ptr, "pools": pools, "group_table": groups,
              "block_count": block_count, "blocks_visited": 0,
              "meshes": [], "mapped_vertices": 0, "weighted_vertices": 0,
-             "non_geometry_commands": [],
+             "non_geometry_commands": [], "auxiliary_commands": [],
              "gpu_source_position_max_error": 0., "gpu_source_normal_max_error": 0.,
              "weighted_bind_pair_max_error": 0., "bounding_boxes": [], "warnings": []}
     ranges = []
@@ -418,6 +430,7 @@ def _entry(r, entry_index, model, skeletons, pose_template=None, pkx_compat=Fals
                 has_normals = not position_only
                 if position_only and category == 0:
                     r.fail(p, "position-only source-mapped meshes are unsupported")
+                has_vertex_colors = pkx_compat and bool(flags & 2) and not position_only
                 stride = (
                     (12 if position_only else 24)
                     + (4 if pkx_compat and flags & 2 and not position_only else 0)
@@ -441,14 +454,16 @@ def _entry(r, entry_index, model, skeletons, pose_template=None, pkx_compat=Fals
                         r.fail(ip + k * 2, f"strip index {index} outside {vertex_count} vertices")
                 raw = np.frombuffer(r.data, dtype="<f4", count=vertex_count * (stride // 4),
                                     offset=vb + voffset).reshape(vertex_count, stride // 4)
-                if not np.isfinite(raw).all():
+                finite_attributes = np.isfinite(raw)
+                if has_vertex_colors:
+                    finite_attributes[:, 6] = True
+                if not finite_attributes.all():
                     r.fail(vb + voffset, "non-finite GPU vertex attribute")
                 mesh = SGDMesh(f"entry{entry_index:02d}_block{block_id:02d}_mesh{len(stats['meshes']):02d}")
                 mesh.material_index, mesh.bone_index = mat_base + material, bone_base + coord
                 uv_offset = 3 if position_only else 6 + (
                     1 if pkx_compat and flags & 2 else 0
                 )
-                has_vertex_colors = pkx_compat and bool(flags & 2) and not position_only
                 if pkx_compat and flags & 1 and np.max(np.abs(raw[:, uv_offset:uv_offset + 2])) > 1e8:
                     stats["warnings"].append(
                         f"Extreme UV value in mesh at 0x{p:X}; source values retained"
@@ -456,12 +471,7 @@ def _entry(r, entry_index, model, skeletons, pose_template=None, pkx_compat=Fals
                 mesh.uvs = raw[:, uv_offset:uv_offset + 2].astype(float).tolist() if flags & 1 else []
                 mesh.colors = [[1., 1., 1., 1.] for _ in range(vertex_count)]
                 if has_vertex_colors:
-                    packed_colors = np.frombuffer(
-                        r.data,
-                        dtype="<u4",
-                        count=vertex_count,
-                        offset=vb + voffset + 24,
-                    )
+                    packed_colors = raw[:, 6].view("<u4")
                     mesh.colors = [
                         [
                             ((int(color) >> 16) & 0xFF) / 255.,
@@ -534,6 +544,29 @@ def _entry(r, entry_index, model, skeletons, pose_template=None, pkx_compat=Fals
                     "mapping_offset": mapping_at if category == 0 else None,
                     "unknown_words": {str(i * 4): fields[i] for i in (2, 4, 6, 8, 10, 12, 13)}})
                 model.meshes.append(mesh)
+            elif (
+                pkx_compat
+                and category == 14
+                and allow_auxiliary_category14
+                and size > 0x24
+            ):
+                if (
+                    p != start
+                    or p + size + 4 != limit
+                    or r.u32(p + size) != 0
+                ):
+                    r.fail(
+                        p,
+                        "large category 14 command must occupy its own block "
+                        "and end at the block terminator",
+                    )
+                stats["auxiliary_commands"].append({
+                    "offset": p,
+                    "category": category,
+                    "size": size,
+                    "block": block_id,
+                    "semantics": "uninterpreted_ff2x_auxiliary_data",
+                })
             elif pkx_compat and category in (12, 14, 64, 65):
                 expected_sizes = {12: {0x90}, 14: {0x1C, 0x24}, 64: {0x10}, 65: {0x10}}
                 if size not in expected_sizes[category]:
@@ -607,7 +640,12 @@ def parse_mpx(data_or_path, *, xpr=None, name=None, decode_textures=True):
     )
 
 
-def parse_pkx_geometry(data, *, name="xbox_pkx"):
+def parse_pkx_geometry(
+    data,
+    *,
+    name="xbox_pkx",
+    allow_auxiliary_category14=False,
+):
     """Parse bounded 0x1060 payloads from a validated PKX package adapter."""
     return _parse_mpx(
         data,
@@ -616,6 +654,7 @@ def parse_pkx_geometry(data, *, name="xbox_pkx"):
         pose_templates=None,
         allow_pose_fallback=False,
         pkx_compat=True,
+        allow_auxiliary_category14=allow_auxiliary_category14,
     )
 
 
@@ -660,6 +699,7 @@ def _parse_mpx(
     pose_templates=None,
     allow_pose_fallback=True,
     pkx_compat=False,
+    allow_auxiliary_category14=False,
 ):
     data, source_name, path = _source(data_or_path, "<MPX buffer>")
     r = _Reader(data, source_name)
@@ -694,6 +734,7 @@ def _parse_mpx(
                 er, i, model, skeletons,
                 pose_template=template,
                 pkx_compat=pkx_compat,
+                allow_auxiliary_category14=allow_auxiliary_category14,
             )
         )
         pos += 16 + size

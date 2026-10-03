@@ -188,6 +188,13 @@ def _decode_textures(xpr, name, header, resources):
     return textures
 
 
+def decode_xpr0_archive(data, *, name="<XPR0 buffer>"):
+    """Decode a complete Xbox XPR0 archive into its level-zero textures."""
+    xpr = bytes(data)
+    header, resources = _parse_xpr0(xpr, name)
+    return _decode_textures(xpr, name, header, resources)
+
+
 def _triangle_key(mesh, triangle):
     return tuple(sorted(
         tuple(round(float(component), 4) for component in mesh.positions[index])
@@ -330,4 +337,4 @@ def parse_pkx(data_or_path, *, name=None):
     return result
 
 
-__all__ = ["PKXError", "parse_pkx"]
+__all__ = ["PKXError", "decode_xpr0_archive", "parse_pkx"]

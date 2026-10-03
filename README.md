@@ -12,21 +12,27 @@ browser tab.
 
 ## Current state — read this first
 
-- When setting the paths, make sure you set it to the folder `3ddata` of each game.
-  Each saved game path must point exactly to that game's `3ddata` folder.
+- Each saved game path must point exactly to that game's `3ddata` folder.
   The folder picker warns before opening and rejects other directories. Saved
   paths from older versions that do not end in `3ddata` are cleared and must
   be selected again.
 
-- Supports the PS2 releases of Fatal Frame 1–3, Fatal Frame 1 Xbox and Fatal
-  Frame 2 Wii, including model viewing, texture inspection and 3D export.
-- Recent parser and viewer improvements include static room lighting,
-  recovered vertex colors, Xbox PKX room textures, Wii character transparency,
-  expanded FF3 character labels, game-specific asset filtering and organized
-  per-game parser/documentation packages.
+- Supports the PS2 releases of Fatal Frame 1–3, Fatal Frame 1 Xbox, Fatal
+  Frame 2 Xbox geometry, and Fatal Frame 2 Wii, with format-specific limits.
+- Recent viewer/parser work includes static FF1 room lighting, recovered
+  FF2 PS2 room vertex colors, native Xbox PKX/MPX and FF2 Xbox 0x1070 model
+  support, Wii character alpha masks, FF2 Xbox baked room colors, expanded
+  FF3 character labels, and game-specific file-tree filtering.
+- A Windows one-file executable is available as `PZViewer.exe` in the project
+  root; see
+  [Running the executable](#running-the-executable). It uses the installed
+  Microsoft Edge WebView2 runtime for its native window and can fall back to
+  the system browser.
 - There is no automated test suite. Python module imports, the viewer/CLI
   entry points and documentation links should be checked when making changes.
-- Documentation is grouped by game; see the [documentation index](docs/README.md).
+- Documentation is grouped by game; see the [documentation index](docs/README.md)
+  and [source asset-format atlas](docs/source-asset-formats.md) for the
+  cross-game collection census and per-format reverse-engineering references.
 
 ---
 ## Games
@@ -37,12 +43,23 @@ browser tab.
 | | Fatal Frame 2 (PS2) | `.pk2`, `.sgd`, `.tim2`, `.tm2` |
 | | Fatal Frame 3 (PS2) | `.pk4`, `.sgd`, `.tm2` |
 | **Extra** | Fatal Frame 1 XBOX | `.mpx`, `.pkx` |
+| | Fatal Frame 2 XBOX | `.mdl`, `.pk2` (matching `.ppd` required) |
 | | Fatal Frame 2 Wii | `.mdlb`, `.pk2b` |
 
 The two Xbox/Wii ports live on their own tab because each is a port of a game
 that already has an entry, and each uses a different container set. Two
 "Fatal Frame 2" rows side by side with nothing to tell them apart is worse than
 a second tab.
+
+### Fatal Frame 1 PS2
+
+The viewer loads FF1 character `.mdl` files and room/model `.pk2` and `.sgd`
+resources, with TIM2 textures. Room `.lit` sidecars are decoded and used to
+bake supported static lighting into vertex colors. FF1-specific texture
+handling distinguishes color and monochrome variants; character pose and
+matrix conversion retain the stored pose instead of forcing a guessed T-pose.
+See the [FF1 format inventory](docs/ff1/formats.md), [lighting guide](docs/ff1/lighting-guide.md)
+and [color/pose notes](docs/ff1/color-and-pose.md).
 
 ### Fatal Frame 1 XBOX
 
@@ -57,7 +74,17 @@ Xbox-specific paths.
 The container layouts are written up in
 [docs/ff1x/sgd-1060-format.md](docs/ff1x/sgd-1060-format.md),
 [docs/ff1x/pkx-format.md](docs/ff1x/pkx-format.md) and the texture archive in
-[docs/ff1x/xpr-format.md](docs/ff1x/xpr-format.md).
+[docs/ff1x/xpr-format.md](docs/ff1x/xpr-format.md), with additional
+[observed format notes](docs/ff1x/formats.md).
+
+### Fatal Frame 2 PS2
+
+FF2 PS2 room and character content uses its own PK2/SGD/TIM2 path, separate
+from the similarly named FF1 and Xbox formats. Supported room data preserves
+recovered GS vertex colors; texture reconstruction accounts for the observed
+GS uploads and palette/color-mode distinctions. See the [FF2 model notes](docs/ff2/mdl-format.md),
+[texture and vertex-color notes](docs/ff2/textures-and-vertex-colors.md) and
+[format inventory](docs/ff2/formats.md).
 
 ### Fatal Frame 2 Wii
 
@@ -69,11 +96,44 @@ textures, including partial alpha for hair, eyelashes and clothing details.
 Transparency rendering keeps depth writing enabled for these partial-alpha
 character textures to reduce sorting artifacts.
 
+### Fatal Frame 2 XBOX
+
+The Extra tab browses the Xbox release's `3ddata` directory and loads supported
+geometry and textures from `.mdl` and `.pk2` packages using their matching
+`.ppd` sidecars. Room vertex colors are enabled automatically as baked
+lighting. The FF2 Xbox theme is available in the Themes list. Two rooms with
+isolated opaque auxiliary commands now load; their payloads are preserved in
+diagnostics but not used as render geometry. Multi-archive packages now
+resolve secondary XPR0 data from their own PPD allocation instead of reusing
+the primary archive's data range. This fixes the identified allocation
+mismatch, but the reported speckling on `rks00.pk2` lamp textures remains
+visually unresolved. The format reference is
+split by file type: [`.mdl`](docs/ff2x/mdl-format.md),
+[`.pk2`](docs/ff2x/pk2-format.md), [`.ppd`](docs/ff2x/ppd-format.md) and
+[XPR0 textures](docs/ff2x/xpr0-format.md), with an
+[overview](docs/ff2x/README.md), [index](docs/ff2x/formats.md) and
+[ancillary-file observations](docs/ff2x/ancillary-files.md).
+
+### Fatal Frame 3 PS2
+
+The FF3 format documentation covers the supplied source-tree census,
+nested PK4/SGD character resources, TIM2 pictures and room/furniture/camera
+sidecars. Binary fields whose semantics have not been confirmed are marked as
+observations rather than presented as complete specifications. See the
+[FF3 format index](docs/ff3/formats.md) and
+[cross-game source asset atlas](docs/source-asset-formats.md).
+The file browser hides the root `camera`, `room/data`, `door/motion` and
+`furniture/motion` folders, non-loadable character folders
+(`character/shape`, `character/motion`, `character/char_shadow_pk4`) and the
+redundant `*_00_*pk4`, `*_01_*pk4` and `*_02_*pk4` model variants. These
+filters affect the browser only. Character labels include verified names
+such as `ch049` — Fallen Woman.
+
 ### Rendering and asset data
 
 - FF1 PS2 room `.lit` data is used to bake static lighting into vertex colors.
-  Xbox rooms use their matching `.lit` sidecars for the corresponding
-  game-specific lighting path.
+  FF1 Xbox rooms use their matching `.lit` sidecars for their game-specific
+  lighting path; FF2 Xbox room lighting comes from the packed vertex colors.
 - FF2 PS2 rooms can use recovered stored GS vertex colors. The viewer exposes
   vertex colors as a separate toggle, and the game-specific exporters preserve
   the supported color data.
@@ -92,6 +152,22 @@ python pz_viewer.py
 
 Or double-click `run_viewer.bat`. Add `--browser` to open in your own browser
 instead of the native window.
+
+### Running the executable
+
+On Windows, run `PZViewer.exe` from the project root. The current one-file build was smoke
+tested by starting it and confirming that its local viewer page returned
+HTTP 200. For a development build, use the same environment as the source and
+run:
+
+```powershell
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name PZViewer --icon .\pzviewer.ico --add-data "viewer\static;viewer\static" --collect-all webview --hidden-import webview.platforms.edgechromium --hidden-import webview.platforms.winforms --hidden-import tkinter --hidden-import tkinter.filedialog .\pz_viewer.py
+```
+
+The build writes `dist\PZViewer.exe`; copy it to the project root if you want
+to keep it next to `run_viewer.bat`. Windows needs the Microsoft Edge
+WebView2 runtime for the native window. The launcher falls back to the system
+browser if native WebView startup is unavailable.
 
 Then pick a game folder once with **Select** on its row in the Asset Browser;
 the row remembers it, **Update** points it somewhere else and **✖** forgets it.
@@ -114,7 +190,11 @@ texture and linked resource files resolve correctly.
   nothing loadable in it offers **`... (Parent Folder)`** instead.
 - Known non-loadable or redundant entries are filtered for the selected game;
   filtering only hides entries in the browser and does not delete files. This
-  includes auxiliary FF3 character folders and model variants, FF2 Wii room
+  includes FF3 `character/shape`, `character/motion` and
+  `character/char_shadow_pk4`, the `*_00_*pk4`, `*_01_*pk4` and `*_02_*pk4`
+  model variants, FF3 root `camera`, `room/data`, `door/motion` and
+  `furniture/motion`, FF2/FF2 Wii root `camera`, FF2 Wii `room/mh`, `room/pzb`
+  and `room/zld`, FF2 Xbox root `camera` and the same three FF2 Xbox room
   folders, and known unsupported FF2 furniture PK2 files.
 
 ---
@@ -177,10 +257,11 @@ loading untextured.
 
 **Themes** picks a palette or **Dynamic** to follow the folder you are
 browsing. Each game has its own: FF1, FF1 XBOX (the FF1 palette shifted a
-little), FF2 (amber and parchment, from the "Play Data" menu), FF2 Wii (crimson
-Butterfly), FF3 (cold gold). **Dynamic** is the default when no preference has
-been chosen; a manually selected theme is saved and restored when the viewer
-reopens. The icon at the top left is the camera of the game on screen.
+little), FF2 (amber and parchment, from the "Play Data" menu), FF2 XBOX
+(charred black and ember orange), FF2 Wii (crimson Butterfly), and FF3 (cold
+gold). **Dynamic** is the default when no preference has been chosen; a
+manually selected theme is saved and restored when the viewer reopens. The
+icon at the top left is the camera of the game on screen.
 
 ---
 
@@ -243,19 +324,23 @@ viewer/                 HTTP server and the whole UI
   server.py             parsing, serialisation, export, file browsing
   static/app.js         scene, viewport, layers panel, theme picker
   static/index.html     markup
-  static/style.css      styles and the five palettes
+  static/style.css     styles and the per-game palettes
   static/*.png          the viewer icon and the per-game camera icons
 pz_core/
   common/               shared model types and low-level helpers
   ff1/                  Fatal Frame 1 PS2 parsers
   ff1x/                 Fatal Frame 1 Xbox parsers
   ff2/                  Fatal Frame 2 PS2 parsers
+  ff2x/                 Fatal Frame 2 Xbox 0x1070 model/PPD reader
   ff2w/                 Fatal Frame 2 Wii parsers
   ff3/                  Fatal Frame 3 PS2 parsers
   export/               shared exporter and game-specific adapters
 docs/
-  ff1/, ff1x/, ff2/     guides, format notes and validation artifacts
-  ff2w/                 Wii formats and repair notes
+  source-asset-formats.md cross-game inventory of 24,625 supplied files
+  ff1/, ff1x/, ff2/     per-game format notes, guides and validation artifacts
+  ff2x/                 MDL, PK2, PPD, XPR0 and ancillary-file references
+  ff2w/                 Wii format specifications and repair notes
+  ff3/                  PK4/SGD, TIM2 and auxiliary format references
   architecture/         cross-game technical notes
   history/              historical delivery manifests
 tools/                  analysis scripts referenced by docs/
