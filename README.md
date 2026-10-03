@@ -18,7 +18,7 @@ browser tab.
   be selected again.
 
 - Supports the PS2 releases of Fatal Frame 1–3, Fatal Frame 1 Xbox, Fatal
-  Frame 2 Xbox geometry, and Fatal Frame 2 Wii, with format-specific limits.
+  Frame 2 Xbox, and Fatal Frame 2 Wii.
 - Recent viewer/parser work includes static FF1 room lighting, recovered
   FF2 PS2 room vertex colors, native Xbox PKX/MPX and FF2 Xbox 0x1070 model
   support, Wii character alpha masks, FF2 Xbox baked room colors, expanded
