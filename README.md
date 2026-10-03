@@ -12,7 +12,8 @@ browser tab.
 
 ## Current state — read this first
 
-- Each saved game path must point exactly to that game's `3ddata` folder.
+- When setting the paths, make sure you set it to the folder `3ddata` of each game.
+  Each saved game path must point exactly to that game's `3ddata` folder.
   The folder picker warns before opening and rejects other directories. Saved
   paths from older versions that do not end in `3ddata` are cleared and must
   be selected again.
